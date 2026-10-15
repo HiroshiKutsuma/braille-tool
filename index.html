@@ -1,0 +1,1744 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>点字ツール — hirokutsu</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f0ede8;
+  --surface: #fff;
+  --surface2: #f7f5f2;
+  --border: #ddd9d3;
+  --text: #1a1814;
+  --text2: #7a756e;
+  --accent: #2a2520;
+  --dot-on: #1a1814;
+  --dot-off: transparent;
+  --dot-stroke: #c8c3bc;
+  --radius: 8px;
+  --font: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 2rem 1rem;
+}
+
+.app {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+header {
+  margin-bottom: 2rem;
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+header h1 {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+header span {
+  font-size: 12px;
+  color: var(--text2);
+}
+
+/* パネル */
+.panel {
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text2);
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+
+/* 入力エリア */
+textarea {
+  width: 100%;
+  height: 140px;
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.7;
+  resize: vertical;
+  background: var(--surface2);
+  color: var(--text);
+  outline: none;
+}
+textarea:focus { border-color: #999; background: var(--surface); }
+
+/* ボタン群 */
+.toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  align-items: center;
+}
+
+.btn {
+  padding: 7px 16px;
+  font-size: 13px;
+  font-family: var(--font);
+  border-radius: 6px;
+  cursor: pointer;
+  border: 0.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  transition: background 0.12s;
+}
+.btn:hover { background: var(--bg); }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn.primary:hover { background: #3a3530; }
+.btn.active { font-weight: 500; background: var(--surface2); }
+
+.sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
+
+.sym-btn {
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: var(--font);
+  border-radius: 5px;
+  cursor: pointer;
+  border: 0.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+.sym-btn:hover { background: var(--bg); }
+
+.sym-menu-wrap { position: relative; display: inline-block; }
+.sym-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  z-index: 200;
+  min-width: 200px;
+}
+.sym-cat-list { padding: 4px 0; }
+.sym-cat-item {
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sym-cat-item:hover { background: var(--bg); }
+.sym-cat-item::after { content: '›'; color: var(--text2); }
+.sym-items {
+  padding: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-width: 320px;
+  border-top: 0.5px solid var(--border);
+}
+.sym-back-btn {
+  width: 100%;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--text2);
+  cursor: pointer;
+  border: none;
+  background: none;
+  text-align: left;
+  font-family: var(--font);
+  margin-bottom: 4px;
+}
+.sym-back-btn:hover { color: var(--text); }
+
+.radio-group {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text2);
+}
+.radio-group label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+/* 点字表示 */
+#braille-output {
+  min-height: 80px;
+}
+
+.braille-line {
+  margin-bottom: 1.25rem;
+}
+
+.line-ruby {
+  font-size: 11px;
+  color: var(--text2);
+  margin-bottom: 5px;
+  font-family: monospace;
+  letter-spacing: 0.02em;
+}
+
+.braille-row {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+.braille-row.rtl { flex-direction: row-reverse; }
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.cell-label {
+  font-size: 9px;
+  color: var(--dot-stroke);
+  line-height: 1;
+}
+
+.cell-empty {
+  width: 26px;
+  height: 42px;
+}
+
+/* フッター */
+footer {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text2);
+  margin-top: 2rem;
+}
+
+.legend {
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 0.5px solid var(--border);
+}
+
+/* BSEプレビュー */
+#bse-preview {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text2);
+  background: var(--surface2);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-top: 1rem;
+  word-break: break-all;
+  white-space: pre-wrap;
+  max-height: 120px;
+  overflow-y: auto;
+  display: none;
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<header>
+  <h1>点字ツール</h1>
+  <span>ひらがな → 点字 / BSEファイル</span>
+</header>
+
+<!-- 入力パネル -->
+<div class="panel">
+  <div class="panel-title">テキスト入力</div>
+  <textarea id="input-text" placeholder="ひらがなテキストを入力してください。&#10;例: じこしょーかい&#10;　　くつま　ひろし　です。"></textarea>
+
+  <div class="toolbar">
+    <button class="btn primary" onclick="convert()">変換</button>
+    <div class="sep"></div>
+    <div class="sym-menu-wrap" id="sym-menu-wrap">
+      <button class="btn" onclick="toggleSymMenu()">記号挿入 ▾</button>
+      <div class="sym-dropdown" id="sym-dropdown" style="display:none;">
+        <div class="sym-cat-list" id="sym-cat-list">
+          <div class="sym-cat-item" onclick="showSymCat('kuten')">句読点・かぎ・かっこ</div>
+          <div class="sym-cat-item" onclick="showSymCat('eiji')">英字・数字符号</div>
+          <div class="sym-cat-item" onclick="showSymCat('kana')">かな符号</div>
+          <div class="sym-cat-item" onclick="showSymCat('shiji')">指示符・挿入符</div>
+          <div class="sym-cat-item" onclick="showSymCat('tsunagi')">つなぎ符・見出し符・始行符</div>
+          <div class="sym-cat-item" onclick="showSymCat('sen')">線類・矢印</div>
+          <div class="sym-cat-item" onclick="showSymCat('hoshi')">星印・注記符</div>
+          <div class="sym-cat-item" onclick="showSymCat('eibun')">英文記号</div>
+        </div>
+        <div class="sym-items" id="sym-items" style="display:none;"></div>
+      </div>
+    </div>
+    <div class="sep"></div>
+    <span style="font-size:13px;color:var(--text2);">英字方式：</span>
+    <label class="radio-group">
+      <input type="radio" name="alpha" value="gaiji" checked> 外字符
+    </label>
+    <label class="radio-group">
+      <input type="radio" name="alpha" value="foreign"> 外国語引用符
+    </label>
+    <div class="sep"></div>
+    <button class="btn" onclick="loadTxt()">txtを開く</button>
+    <input type="file" id="txt-input" accept=".txt" style="display:none" onchange="onTxtLoad(event)">
+    <button class="btn" onclick="loadBSE()">BSEを開く</button>
+    <input type="file" id="bse-input" accept=".bse" style="display:none" onchange="onBSELoad(event)">
+    <div class="sep"></div>
+    <span id="dl-area" style="display:none">
+    <button class="btn primary" onclick="downloadBSE()" id="dl-bse-btn">BSEを保存</button>
+    <button class="btn" onclick="downloadTXT()" id="dl-txt-btn">TEXTを保存</button>
+    </span>
+  </div>
+  <div id="bse-preview"></div>
+</div>
+
+<div class="panel">
+  <div class="panel-title">点字表示</div>
+
+  <div class="toolbar" style="margin-top:0; margin-bottom:1rem;">
+    <button class="btn active" id="btn-concave" onclick="setMode('concave')">凹式　左←右</button>
+    <button class="btn" id="btn-convex" onclick="setMode('convex')">凸式　左→右</button>
+    <div class="sep"></div>
+    <button class="btn" id="btn-ruby" onclick="toggleRuby()">読み表示 ON</button>
+    <span id="mode-desc" style="font-size:12px;color:var(--text2);margin-left:4px;">右列=1,2,3番 / 左列=4,5,6番</span>
+  </div>
+
+  <div id="braille-output">
+    <div style="font-size:13px;color:var(--text2);padding:1rem 0;">変換するとここに点字が表示されます。</div>
+  </div>
+
+  <div class="legend">● 黒丸=点あり　○ 白丸=点なし　｜　凸式：左列1,2,3番 / 凹式：右列1,2,3番</div>
+</div>
+
+<footer>点字ツール（試作版） — BASE形式（*.BSE）対応<br><span style="font-size:11px;">個人が作った非公式のツールです。T・エディタやBASEの開発者とは関係ありません。変換結果は必ず校正してください。入力した文章やファイルはどこにも送信しません。</span></footer>
+</div>
+
+<script>
+// ===== 変換テーブル =====
+const NUM_MAP = {'0':'J','1':'A','2':'B','3':'C','4':'D','5':'E','6':'F','7':'G','8':'H','9':'I'};
+const KANA = {
+  'あ':'A','い':'B','う':'C','え':'F','お':'I',
+  'か':'*','き':'<','く':'%','け':'$','こ':'[',
+  'さ':':','し':'\\','す':'?','せ':']','そ':'W',
+  'た':'O','ち':'R','つ':'N','て':'Q','と':'T',
+  'な':'K','に':'L','ぬ':'M','ね':'P','の':'S',
+  'は':'U','ひ':'V','ふ':'X','へ':'&','ほ':'!',
+  'ま':'Z','み':'(','む':'Y','め':'=','も':')',
+  'や':'/','ゆ':'+','よ':'>',
+  'ら':'E','り':'H','る':'D','れ':'G','ろ':'J',
+  'わ':"'",'を':'9','ん':'0',
+  'っ':'1','ー':'3','。':'4','、':';',
+  '（':'7','）':'7','(':'7',')':'7',
+};
+const DAKU = {
+  'が':'か','ぎ':'き','ぐ':'く','げ':'け','ご':'こ',
+  'ざ':'さ','じ':'し','ず':'す','ぜ':'せ','ぞ':'そ',
+  'だ':'た','ぢ':'ち','づ':'つ','で':'て','ど':'と',
+  'ば':'は','び':'ひ','ぶ':'ふ','べ':'へ','ぼ':'ほ',
+};
+const HANDAKU = {'ぱ':'は','ぴ':'ひ','ぷ':'ふ','ぺ':'へ','ぽ':'ほ'};
+const ROW_VOWELS = {
+  'か':['か','き','く','け','こ'],'さ':['さ','し','す','せ','そ'],
+  'た':['た','ち','つ','て','と'],'な':['な','に','ぬ','ね','の'],
+  'は':['は','ひ','ふ','へ','ほ'],'ま':['ま','み','む','め','も'],
+  'ら':['ら','り','る','れ','ろ'],
+};
+const ROW_BASE = {};
+for (const [row, vs] of Object.entries(ROW_VOWELS)) vs.forEach(v => ROW_BASE[v] = row);
+const SMALL_IDX = {'ゃ':0,'ゅ':2,'ょ':4};
+const SPECIAL = {
+  // てぃ・でぃ・とぅ・どぅ（既存）
+  'てぃ':'@R', 'でぃ':'^R', 'とぅ':'@N', 'どぅ':'^N',
+  // ふ行（実測値）
+  'ふぁ':'5U', 'ふぃ':'5V', 'ふぇ':'5&', 'ふぉ':'5!', 'ふゅ':'.+',
+  // く行（実測値）
+  'くぁ':'5*', 'くぃ':'5<', 'くぇ':'5$', 'くぉ':'5[',
+  // ぐ行（実測値）
+  'ぐぁ':'4*', 'ぐぃ':'4<', 'ぐぇ':'4$', 'ぐぉ':'4[',
+  // すぃ・ずぃ（実測値）
+  'すぃ':'@\\', 'ずぃ':'^\\',
+  // てゅ・でゅ（実測値）
+  'てゅ':'.N', 'でゅ':'_N',
+  // つ行（実測値）
+  'つぁ':'5O', 'つぃ':'5R', 'つぇ':'5Q', 'つぉ':'5T',
+  // @系（実測値）
+  'にぇ':'@P', 'ひぇ':'@&', 'きぇ':'@$', 'いぇ':'@F',
+  'しぇ':'@]', 'ちぇ':'@Q',
+  // ^系（実測値）
+  'じぇ':'^]',
+  // うぁ行
+  'うぁ':'CA', 'うぃ':'CB', 'うぇ':'CF', 'うぉ':'CI',
+  // ヴ行（実測値）
+  'ゔぁ':'4U', 'ゔぃ':'4V', 'ゔぇ':'4&', 'ゔぉ':'4!', 'ゔょ':'_>',
+  'ヴぁ':'4U', 'ヴぃ':'4V', 'ヴぇ':'4&', 'ヴぉ':'4!', 'ヴょ':'_>',
+  'ヴァ':'4U', 'ヴィ':'4V', 'ヴェ':'4&', 'ヴォ':'4!', 'ヴョ':'_>',
+};
+const SMALL_KANA = new Set('ぁぃぅぇぉゃゅょァィゥェォャュョ');
+// ゔ（ヴ）は濁音符+う+後続で処理
+const DAKU_U_MAP = {
+  'ぁ':'"CA', 'ぃ':'"CB', 'ぅ':'"CC', 'ぇ':'"CF', 'ぉ':'"CI',
+  'ゃ':'"C/', 'ゅ':'"C+', 'ょ':'"C>',
+};
+
+// BSE → 点パターン
+const BSE_DOTS = {
+  '!':[2,3,4,6],'"':[5],'#':[3,4,5,6],'$':[1,2,4,6],'%':[1,4,6],
+  '&':[1,2,3,4,6],"'":[3],'(':[1,2,3,5,6],')':[2,3,4,5,6],'*':[1,6],
+  '+':[3,4,6],',':[6],'.':[6],'-':[3,6],'/':[3,4],'5':[2,6],
+  '0':[3,5,6],'1':[2],'2':[2,3],'=':[1,2,3,4,5,6],'3':[2,5],'4':[2,5,6],
+  '7':[2,3,5,6],'8':[2,3,6],'9':[3,5],
+  ':':[1,5,6],';':[5,6],'<':[1,2,6],']':[1,2,4,5,6],'>':[3,4,5],
+  '?':[1,4,5,6],'@':[4],
+  'A':[1],'B':[1,2],'C':[1,4],'D':[1,4,5],'E':[1,5],
+  'F':[1,2,4],'G':[1,2,4,5],'H':[1,2,5],'I':[2,4],'J':[2,4,5],
+  'K':[1,3],'L':[1,2,3],'M':[1,3,4],'N':[1,3,4,5],'O':[1,3,5],
+  'P':[1,2,3,4],'Q':[1,2,3,4,5],'R':[1,2,3,5],'S':[2,3,4],'T':[2,3,4,5],
+  'U':[1,3,6],'V':[1,2,3,6],'W':[2,4,5,6],'X':[1,3,4,6],'Y':[1,3,4,5,6],'Z':[1,3,5,6],
+  '[':[2,4,6],'\\':[1,2,5,6],'^':[4,5],' ':[],'　':[],
+};
+
+const LABEL = {
+  '!':"ほ",'"':"濁",'#':"数",'$':"け",'%':"く",'&':"へ","'":'わ',
+  '(':"み",')':"も",'*':"か",'+':"ゆ",',':"半",'-':"繋1",'.':"半",'/':"や",
+  '0':"ん",'1':"っ",'=':"め",'3':"ー",'4':"。",'5':"ツ前",'7':"（）",
+  '8':"外引",'9':"を",':':"さ",';':"、",'<':"き",']':"せ",'>':"よ",
+  '?':"す",'@':"小",'^':"濁小",
+  'A':"あ",'B':"い",'C':"う",'D':"る",'E':"ら",'F':"え",'G':"れ",
+  'H':"り",'I':"お",'J':"ろ",'K':"な",'L':"に",'M':"ぬ",'N':"つ",
+  'O':"た",'P':"ね",'Q':"て",'R':"ち",'S':"の",'T':"と",'U':"は",
+  'V':"ひ",'W':"そ",'X':"ふ",'Y':"む",'Z':"ま",'[':"こ",'\\':"し",
+  ' ':"□",'　':"□",
+};
+
+function getYoon(base, small) {
+  const row = ROW_BASE[base];
+  if (row && small in SMALL_IDX) return KANA[ROW_VOWELS[row][SMALL_IDX[small]]] || '?';
+  return '?';
+}
+
+function isAlpha(ch) { return /^[a-zA-Z]$/.test(ch); }
+
+// 第一つなぎ符: 点3,6 → BSE文字 '-' (0x2D) 確定！
+const TSUNAGI1 = '-';
+
+// ア行・ラ行で始まるかどうかを判定
+const A_RA_ROW = new Set(['あ','い','う','え','お','ら','り','る','れ','ろ']);
+// 濁音・半濁音・拗音の先頭文字も含む
+const DAKU_A_RA = new Set(['あ','い','う','え','お','ら','り','る','れ','ろ']);
+
+function startsWithARa(ch) {
+  return A_RA_ROW.has(ch);
+}
+
+// ===== 記号プルダウンメニュー =====
+const SYM_CATS = {
+  kuten: {
+    label: '句読点・かぎ・かっこ',
+    items: [
+      ['句点（。）', '。'], ['読点（、）', '、'],
+      ['第一カギ　「」', '「」'], ['第二カギ　〈〉', '〈〉'], ['二重カギ　『』', '『』'],
+      ['第一カッコ　（）', '（）'], ['第二カッコ　［］', '［］'], ['二重カッコ　《》', '《》'],
+      ['隅カッコ〔', '〔'], ['隅カッコ〕', '〕'],
+    ]
+  },
+  eiji: {
+    label: '英字・数字符号',
+    items: [
+      ['数符', '《数符》'], ['外字符', '《外字符》'], ['大文字符', '《大文字》'],
+      ['二重大文字符', '《二重大》'],
+      ['外引用符（開）', '《外引開》'], ['外引用符（閉）', '《外引閉》'],
+    ]
+  },
+  kana: {
+    label: 'かな符号',
+    items: [
+      ['濁音符', '《濁》'], ['半濁音符', '《半濁》'], ['小字符', '《小字符》'],
+      ['濁小字符', '《濁小》'], ['っ（促音）', 'っ'], ['ー（長音）', 'ー'],
+    ]
+  },
+  shiji: {
+    label: '指示符・挿入符',
+    items: [
+      ['第1指示符・', '《指1》'], ['第2指示符・・', '《指2》'], ['第3指示符・・・', '《指3》'],
+      ['点訳挿入符', '《点訳挿入》'],
+      ['第1段落挿入符', '《段落1》'],
+      ['第2段落挿入符（開）', '《段落2開》'], ['第2段落挿入符（閉）', '《段落2閉》'],
+    ]
+  },
+  tsunagi: {
+    label: 'つなぎ符・見出し符・始行符',
+    items: [
+      ['第1つなぎ符', '《繋1》'], ['第2つなぎ符', '《繋2》'],
+      ['第1小見出し符', '《小見1》'], ['第2小見出し符', '《小見2》'],
+      ['始行符（｜）', '｜'], ['二重始行符（｜｜）', '｜｜'],
+    ]
+  },
+  sen: {
+    label: '線類・矢印',
+    items: [
+      ['棒線（――）', '――'], ['点線（……）', '……'], ['波線（〜）', '〜'],
+      ['右矢印（→）', '→'], ['左矢印（←）', '←'], ['両向き矢印（←→）', '←→'],
+    ]
+  },
+  hoshi: {
+    label: '星印・注記符',
+    items: [
+      ['第1星印（☆）', '☆'], ['第2星印（★）', '★'],
+      ['第3星印（◇）', '◇'], ['文中注記符（※）', '※'],
+    ]
+  },
+  eibun: {
+    label: '英文記号',
+    items: [
+      ['アポストロフィ', '《アポ》'], ['ハイフン', '《繋1》'],
+      ['ダッシュ', '――'], ['ロングダッシュ', '――――'],
+      ['角カッコ', '《角カッコ》'], ['コーテーション', '《コーテーション》'],
+      ['イタリック符', '《イタリック》'], ['二重イタリック符', '《二重イタリック》'],
+      ['アクセント符', '《アクセント》'],
+    ]
+  },
+};
+
+function toggleSymMenu() {
+  const dd = document.getElementById('sym-dropdown');
+  const isOpen = dd.style.display !== 'none';
+  dd.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) {
+    // カテゴリ一覧に戻す
+    document.getElementById('sym-cat-list').style.display = 'block';
+    document.getElementById('sym-items').style.display = 'none';
+  }
+}
+
+function showSymCat(catKey) {
+  const cat = SYM_CATS[catKey];
+  if (!cat) return;
+  document.getElementById('sym-cat-list').style.display = 'none';
+  const itemsEl = document.getElementById('sym-items');
+  itemsEl.style.display = 'flex';
+  // data-bse属性でBSE文字を渡す（JS文字列エスケープ問題を回避）
+  itemsEl.innerHTML =
+    `<button class="sym-back-btn" onclick="backToSymCats()">◀ もどる</button>` +
+    cat.items.map(([label, bse]) =>
+      `<button class="sym-btn" data-bse="${bse.replace(/"/g,'&quot;')}" onclick="insertBSEFromBtn(this)">${label}</button>`
+    ).join('');
+}
+
+// カッコペア：挿入後カーソルを開きと閉じの間に置く
+const PAIR_INSERTS = {
+  '「」': { open: '「', close: '」' },
+  '〈〉': { open: '〈', close: '〉' },
+  '『』': { open: '『', close: '』' },
+  '（）': { open: '（', close: '）' },
+  '［］': { open: '［', close: '］' },
+  '《》': { open: '《', close: '》' },
+};
+
+function insertBSEFromBtn(btn) {
+  const bseStr = btn.getAttribute('data-bse');
+  const pair = PAIR_INSERTS[bseStr];
+  if (pair) {
+    // ペア挿入: 開きと閉じの間にカーソルを置く
+    const ta = document.getElementById('input-text');
+    const pos = savedCursor || { start: ta.value.length, end: ta.value.length };
+    const val = ta.value;
+    const ins = pair.open + pair.close;
+    ta.value = val.slice(0, pos.start) + ins + val.slice(pos.end);
+    const newPos = pos.start + pair.open.length;
+    savedCursor = { start: newPos, end: newPos };
+    ta.focus();
+    ta.selectionStart = ta.selectionEnd = newPos;
+  } else {
+    insertBSE(bseStr);
+  }
+  document.getElementById('sym-dropdown').style.display = 'none';
+}
+
+function backToSymCats() {
+  document.getElementById('sym-cat-list').style.display = 'block';
+  document.getElementById('sym-items').style.display = 'none';
+}
+
+// メニュー外クリックで閉じる
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('sym-menu-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('sym-dropdown').style.display = 'none';
+  }
+});
+
+
+// カーソル位置を記憶
+let savedCursor = null;
+document.addEventListener('DOMContentLoaded', () => {
+  const ta = document.getElementById('input-text');
+  ta.addEventListener('blur', () => {
+    savedCursor = { start: ta.selectionStart, end: ta.selectionEnd };
+  });
+  ta.addEventListener('keyup', () => {
+    savedCursor = { start: ta.selectionStart, end: ta.selectionEnd };
+  });
+  ta.addEventListener('click', () => {
+    savedCursor = { start: ta.selectionStart, end: ta.selectionEnd };
+  });
+});
+
+function insertBSE(bseStr) {
+  const ta = document.getElementById('input-text');
+  // カーソル位置: 記憶済みの位置を使う（メニュークリック後はfocusが外れるため）
+  const pos = savedCursor || { start: ta.value.length, end: ta.value.length };
+  const start = pos.start;
+  const end = pos.end;
+  const val = ta.value;
+
+  // テキストエリアに表示する記号名
+  const symNames = {
+    '4':'。', ';':'、', '7':'（）', '#':'《数符》',
+    '"':'《濁》', '.':'《半濁》', '@':'《小字符》', '^':'《濁小》',
+    '1':'っ', '3':'ー',
+    '8A0':'《外引開》', '80':'《外引閉》',
+    '-':'《繋1》', ",'": '《繋2》',
+    ',-':'《小見1》', '"1':'《小見2》',
+    ',':'《大文字》', ',,':'《二重大》',
+    ";\\'\"": '〈', ',2':'〉',
+    ';-':'『', '-2':'』',
+    '"7':'〔', '71':'〕',
+    ';7L^?3':'《', '*1[72':'》',
+    '"-':'《指1》', '"--':'《指2》', ';--':'《指3》',
+    '77Q0/%W3@M3X77':'《点訳挿入》',
+    '77':'《段落1》', ';7':'《段落2開》', '72':'《段落2閉》',
+    '33':'――', '111':'……', '--':'〜',
+    '33O':'→', '[33':'←', '[33O':'←→',
+    '99':'☆', '55':'★', ',5':'◇', ';2':'※',
+    '_':'｜', '__':'｜｜',
+    "'":'《アポ》', '----':'――――',
+    ",'\\'":'《角カッコ》',
+    '..':'《二重イタリック》',
+  };
+  const disp = symNames[bseStr] || bseStr;
+
+  ta.value = val.slice(0, start) + disp + val.slice(end);
+  const newPos = start + disp.length;
+  savedCursor = { start: newPos, end: newPos };
+  ta.focus();
+  ta.selectionStart = ta.selectionEnd = newPos;
+}
+
+// 後方互換のためinsertSymもinsertBSEに転送
+function insertSym(bseChar) { insertBSE(bseChar); }
+
+
+
+
+
+// 数字列を取り出してBSEに変換する
+// ルール:
+// - 4桁以内: 数符+数字をそのまま
+// - 5〜8桁: 万の位で区切り（数符+上位+まん+数符+下位）
+// - 9〜12桁: 億でも区切り
+// - 小数点はそのまま数符内で扱う（簡易実装）
+
+function numberToBSE(numStr) {
+  // 数字のみ（小数点含む）の文字列をBSEに変換
+  const result = [];
+  const dotIdx = numStr.indexOf('.');
+  
+  if (dotIdx >= 0) {
+    // 小数: 整数部 + 小数点 + 小数部
+    const intPart = numStr.slice(0, dotIdx);
+    const decPart = numStr.slice(dotIdx + 1);
+    result.push(...numberToBSE(intPart));
+    // 小数点符（位取り点）は今は簡易的にピリオドで代用
+    result.push('4'); // ピリオド
+    result.push('#');
+    for (const d of decPart) result.push(NUM_MAP[d]);
+    return result;
+  }
+
+  const n = parseInt(numStr, 10);
+  
+  if (numStr.length <= 4) {
+    // 4桁以内: 数符+数字
+    result.push('#');
+    for (const d of numStr) result.push(NUM_MAP[d]);
+  } else if (numStr.length <= 8) {
+    // 5〜8桁: 万で区切り
+    const oku = Math.floor(n / 100000000);
+    const man = Math.floor((n % 100000000) / 10000);
+    const below = n % 10000;
+    
+    if (man > 0) {
+      result.push('#');
+      for (const d of String(man)) result.push(NUM_MAP[d]);
+      // まん（ま+ん）
+      result.push('Z'); // ま
+      result.push('0'); // ん
+    }
+    if (below > 0) {
+      result.push('#');
+      const belowStr = String(below).padStart(below < 1000 ? String(below).length : 4, '');
+      for (const d of String(below)) result.push(NUM_MAP[d]);
+    } else if (man > 0 && below === 0) {
+      // 万ちょうどの場合は下位省略
+    }
+  } else if (numStr.length <= 12) {
+    // 9〜12桁: 億・万で区切り
+    const oku = Math.floor(n / 100000000);
+    const man = Math.floor((n % 100000000) / 10000);
+    const below = n % 10000;
+    
+    if (oku > 0) {
+      result.push('#');
+      for (const d of String(oku)) result.push(NUM_MAP[d]);
+      result.push('I'); // お
+      result.push('%'); // く → おく
+    }
+    if (man > 0) {
+      result.push('#');
+      for (const d of String(man)) result.push(NUM_MAP[d]);
+      result.push('Z'); // ま
+      result.push('0'); // ん
+    }
+    if (below > 0) {
+      result.push('#');
+      for (const d of String(below)) result.push(NUM_MAP[d]);
+    }
+  } else {
+    // それ以上は単純に数符+数字（簡易）
+    result.push('#');
+    for (const d of numStr) result.push(NUM_MAP[d]);
+  }
+  
+  return result;
+}
+
+function kanaToBSE(text, alphaMode) {
+  const result = [];
+  const chars = [...text];
+  let i = 0, inForeign = false, inGaiji = false;
+
+  while (i < chars.length) {
+    const ch = chars[i];
+
+    // 《外引開》《外引閉》を直接処理
+    if (chars.slice(i, i+6).join('') === '《外引開》') {
+      result.push('8'); inForeign = true; inGaiji = false; i += 6; continue;
+    }
+    if (chars.slice(i, i+6).join('') === '《外引閉》') {
+      result.push('0'); inForeign = false; i += 6; continue;
+    }
+
+    // 《外字符》を直接処理：次の1単語だけ外字符方式で
+    if (chars.slice(i, i+5).join('') === '《外字符》') {
+      inGaiji = true; i += 5; continue;
+    }
+
+    if (ch === ' ' || ch === '\u3000') {
+      result.push(' '); inGaiji = false; i++; continue;
+    }
+
+    // 数字列をまとめて取り出す
+    if (/\d/.test(ch)) {
+      let numStr = '';
+      while (i < chars.length && (/\d/.test(chars[i]) || chars[i] === '.')) {
+        numStr += chars[i]; i++;
+      }
+      result.push(...numberToBSE(numStr));
+      // 次の文字がア行・ラ行で始まる場合は第一つなぎ符を挿入
+      const nextCh = chars[i] || '';
+      if (startsWithARa(nextCh)) {
+        result.push(TSUNAGI1);
+      }
+      continue;
+    }
+
+    if (isAlpha(ch)) {
+      let word = '';
+      let origWord = '';
+      while (i < chars.length && (isAlpha(chars[i]) || chars[i] === "'")) {
+        origWord += chars[i];
+        word += chars[i] === "'" ? "'" : chars[i].toUpperCase();
+        i++;
+      }
+      // 大文字符判定: 元の文字列から判定
+      const letters = origWord.replace(/'/g, '');
+      const allUpper = letters.length > 0 && letters === letters.toUpperCase();
+      const firstUpper = letters.length > 0 && letters[0] === letters[0].toUpperCase() && letters[0] !== letters[0].toLowerCase();
+      const allLower = letters.length > 0 && letters === letters.toLowerCase();
+
+      if (inGaiji) {
+        // 《外字符》で明示指定 → 外字符方式で1単語、二重にしない（従来通り）
+        result.push(';' + word);
+        inGaiji = false;
+      } else if (alphaMode === 'foreign') {
+        // 外国語引用符方式
+        if (!inForeign) { result.push('8'); inForeign = true; }
+        // 引用符内では単語間は区切りなしだが大文字符は必要
+        if (allUpper && letters.length > 1) {
+          result.push(',,' + word); // 二重大文字符
+        } else if (firstUpper && !allUpper) {
+          result.push(',' + word);  // 大文字符
+        } else {
+          result.push(word);        // 小文字はそのまま（引用符内）
+        }
+      } else {
+        // 外字符方式: 自動で大文字種別を選択（常に外字符 ; を付ける）
+        if (allUpper && letters.length > 1) {
+          result.push(';,,' + word); // 外字符 + 二重大文字符
+        } else if (firstUpper && !allUpper) {
+          result.push(';,' + word);  // 外字符 + 大文字符
+        } else {
+          result.push(';' + word);   // 外字符のみ（小文字 or 1文字大文字）
+        }
+      }
+      continue;
+    }
+
+    if (inForeign && ch !== ' ' && ch !== '\u3000' && !/\d/.test(ch) && ch !== '.') {
+      result.push('0'); inForeign = false;
+    }
+
+    if (ch === '.') { result.push('4'); i++; continue; }
+    if (ch === "'") { result.push("'"); i++; continue; }
+
+    const nxt = chars[i+1] || '';
+    const nxt2 = chars[i+2] || '';
+    // 3文字コンボチェック（じぇ等で濁音符+小字符+本体が3BSE文字になるケース）
+    const combo3 = SPECIAL[ch + nxt + nxt2];
+    const combo = SPECIAL[ch + nxt];
+
+    // ゔ・ヴの処理（SPECIALテーブルで処理）
+    if (ch === 'ゔ' || ch === 'ヴ') {
+      const comboVu = SPECIAL[ch + nxt];
+      if (comboVu) {
+        result.push(comboVu); i += 2;
+      } else {
+        // 単独ヴ
+        result.push('"C'); i++;
+      }
+      continue;
+    }
+
+    if (ch in HANDAKU) {
+      const base = HANDAKU[ch];
+      if (combo) { result.push(combo); i+=2; }  // SPECIALを優先（ふぁ等）
+      else if (nxt in SMALL_IDX) { result.push('.','@',getYoon(base,nxt)); i+=2; }
+      else { result.push('.',KANA[base]); i++; }
+      continue;
+    }
+    if (ch in DAKU) {
+      const base = DAKU[ch];
+      if (combo) { result.push(combo); i+=2; }
+      else if (nxt in SMALL_IDX) { result.push('^',getYoon(base,nxt)); i+=2; }
+      else { result.push('"',KANA[base]); i++; }
+      continue;
+    }
+    if (ch in KANA) {
+      if (combo) { result.push(combo); i+=2; }
+      else if (nxt in SMALL_IDX) { result.push('@',getYoon(ch,nxt)); i+=2; }
+      else { result.push(KANA[ch]); i++; }
+      continue;
+    }
+    if (SMALL_KANA.has(ch)) { i++; continue; }
+    i++;
+  }
+  if (inForeign) result.push('0');
+  return result.join('');
+}
+
+// ===== SVG描画 =====
+function makeSVG(dots, mode) {
+  const W = 26, H = 42, R = 4;
+  const pos = mode === 'convex' ? [
+    [W*0.28,H*0.15],[W*0.28,H*0.50],[W*0.28,H*0.85],
+    [W*0.72,H*0.15],[W*0.72,H*0.50],[W*0.72,H*0.85],
+  ] : [
+    [W*0.72,H*0.15],[W*0.72,H*0.50],[W*0.72,H*0.85],
+    [W*0.28,H*0.15],[W*0.28,H*0.50],[W*0.28,H*0.85],
+  ];
+  let c = '';
+  for (let i=0;i<6;i++) {
+    const on = dots.includes(i+1);
+    c += `<circle cx="${pos[i][0]}" cy="${pos[i][1]}" r="${R}" fill="${on?'var(--dot-on)':'var(--dot-off)'}" stroke="var(--dot-stroke)" stroke-width="1.2"/>`;
+  }
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${c}</svg>`;
+}
+
+// ===== 状態 =====
+let currentMode = 'concave';
+let showRuby = false;
+let currentBSELines = [];
+let currentFilename = 'output.bse';
+
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('btn-concave').classList.toggle('active', mode==='concave');
+  document.getElementById('btn-convex').classList.toggle('active', mode==='convex');
+  document.getElementById('mode-desc').textContent = mode==='convex'
+    ? '左列=1,2,3番 / 右列=4,5,6番'
+    : '右列=1,2,3番 / 左列=4,5,6番';
+  renderOutput();
+}
+
+function toggleRuby() {
+  showRuby = !showRuby;
+  document.getElementById('btn-ruby').textContent = `読み表示 ${showRuby?'OFF':'ON'}`;
+  document.getElementById('btn-ruby').classList.toggle('active', showRuby);
+  renderOutput();
+}
+
+// ===== 変換・描画 =====
+// 記号表示テキスト → BSE文字列 の変換テーブル
+const DISP_TO_BSE = {
+  '《数符》':'#',
+  '《濁》':'"',
+  '《半濁》':'.',
+  '《小字符》':'@',
+  '《濁小》':'^',
+  // 《外字符》《外引開》《外引閉》はkanaToBSEで直接処理
+  '《繋1》':'-',
+  '《繋2》':",'",
+  '《小見1》':',-',
+  '《小見2》':'"1',
+  '《大文字》':',',
+  '《二重大》':',,',
+  // かぎ・かっこ（単体）
+  '「':'-',
+  '」':'-',
+  '〈':";'",
+  '〉':',2',
+  '『':';-',
+  '』':'-2',
+  '〔':'"7',
+  '〕':'71',
+  '［':'"7',
+  '］':'71',
+  '《':';7',
+  '》':'72',
+  '《指1》':'"-',
+  '《指2》':'"--',
+  '《指3》':';--',
+  '《点訳挿入》':'77Q0/%W3@M3X77',
+  '《段落1》':'77',
+  '《段落2開》':';7',
+  '《段落2閉》':'72',
+  '――――':'----',
+  '――':'33',
+  '……':'111',
+  '〜':'--',
+  '←→':'[33O',
+  '→':'33O',
+  '←':'[33',
+  '☆':'99',
+  '★':'55',
+  '◇':',5',
+  '※':';2',
+  '｜｜':'__',
+  '｜':'_',
+  '《アポ》':"'",
+  '《角カッコ》':",'\\",
+  '《二重イタリック》':'..',
+  '《イタリック》':'.',
+  '《アクセント》':'@',
+  '《コーテーション》':'80',
+  '《外字符》':';',
+  // 括弧は通常変換に任せる
+  '（）':'7',
+  '。':'4',
+  '、':';',
+};
+
+// 記号表示テキストを BSE に置換して、変換済みマーカーで囲む
+// \x01...\x02 で囲まれた部分はkanaToBSEをスキップ
+function replaceDispToBSE(line) {
+  let result = line;
+  // 長い文字列から先に置換
+  const sorted = Object.entries(DISP_TO_BSE).sort((a,b) => b[0].length - a[0].length);
+  for (const [disp, bse] of sorted) {
+    // 変換済みマーカーで囲んでkanaToBSEをスキップ
+    result = result.split(disp).join('\x01' + bse + '\x02');
+  }
+  return result;
+}
+
+// 全角の英数字（０-９、Ａ-Ｚ、ａ-ｚ）を半角に直す。日本語入力では全角の数字を打つことが多いため。
+function toHalfWidthAlnum(s) {
+  return s.replace(/[０-９Ａ-Ｚａ-ｚ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
+}
+
+function convert() {
+  const text = toHalfWidthAlnum(document.getElementById('input-text').value);
+  const alphaMode = document.querySelector('input[name="alpha"]:checked').value;
+  const lines = text.split('\n');
+
+  currentBSELines = lines.map(line => {
+    // まず記号表示テキストをBSEに変換（\x01...\x02で囲む）
+    const preConverted = replaceDispToBSE(line);
+
+    // 《外字符》は削除（kanaToBSEがアルファベットを自動検出して;を付けるため）
+    // 《外引開》《外引閉》はalphamodeに応じて処理
+    // → replaceDispToBSEで既に \x01 8 \x02 / \x01 0 \x02 になっている
+
+    // \x01...\x02 で囲まれた部分はスキップ、それ以外をkanaToBSEで変換
+    const parts = preConverted.split(/(\x01[^\x02]*\x02)/);
+    const bse = parts.map(part => {
+      if (part.startsWith('\x01') && part.endsWith('\x02')) {
+        // 変換済み記号：マーカーを外してそのまま使う
+        const inner = part.slice(1, -1);
+        // 《外字符》は空文字（kanaToBSEが自動処理）
+        if (inner === '\x00外字符\x00' || inner === '') return '';
+        return inner;
+      } else {
+        // ひらがな等を変換
+        return kanaToBSE(part, alphaMode);
+      }
+    }).join('');
+
+    return { orig: line, bse };
+  });
+
+  renderOutput();
+
+  // BSEプレビュー
+  const preview = document.getElementById('bse-preview');
+  preview.style.display = 'block';
+  preview.textContent = currentBSELines.map(l => l.bse).join('\n');
+
+  document.getElementById('dl-bse-btn').style.display = '';
+  document.getElementById('dl-txt-btn').style.display = '';
+  document.getElementById('dl-area').style.display = '';
+}
+
+// BSE文字列をグループ（音素単位）に分解する
+// 戻り値: [{chars: ['\"','\\'], label: 'じ'}, ...]
+function bseToGroups(bse) {
+  const chars = [...bse];
+  const groups = [];
+  let i = 0;
+  let inAlpha = false, inForeignDisp = false, inNum = false;
+
+  while (i < chars.length) {
+    const ch = chars[i];
+
+    // スペース
+    if (ch === ' ') {
+      groups.push({ chars: [' '], label: '□', type: 'space' });
+      if (!inForeignDisp) inAlpha = false;
+      inNum = false; i++; continue;
+    }
+
+    // 数符
+    if (ch === '#') {
+      inNum = true; inAlpha = false;
+      groups.push({ chars: ['#'], label: '数', type: 'symbol' });
+      i++; continue;
+    }
+
+    // 外国語引用符開始
+    if (ch === '8') {
+      inForeignDisp = true; inAlpha = true;
+      groups.push({ chars: ['8'], label: '外引', type: 'symbol' });
+      i++; continue;
+    }
+
+    // 外国語引用符終了
+    if (ch === '0' && inForeignDisp) {
+      inForeignDisp = false; inAlpha = false;
+      groups.push({ chars: ['0'], label: '外引', type: 'symbol' });
+      i++; continue;
+    }
+
+    // 数字モード
+    if (inNum) {
+      if ('ABCDEFGHIJ'.includes(ch)) {
+        const num = '1234567890'['ABCDEFGHIJ'.indexOf(ch)];
+        groups.push({ chars: [ch], label: num, type: 'num' });
+        i++; continue;
+      }
+      inNum = false;
+    }
+
+    // 英字符（;）— まず2文字括弧符号を優先チェック
+    if (ch === ';') {
+      const nxt = chars[i+1];
+      // 2文字括弧: ;' = 〈開き, ;- = 『開き, ;7 = 《開き
+      if (!inForeignDisp && nxt === "'") {
+        groups.push({ chars: [';',"'"], label: '〈', type: 'kana' });
+        i += 2; continue;
+      }
+      if (!inForeignDisp && nxt === '-') {
+        groups.push({ chars: [';','-'], label: '『', type: 'kana' });
+        i += 2; continue;
+      }
+      if (!inForeignDisp && nxt === '7') {
+        groups.push({ chars: [';','7'], label: '《', type: 'kana' });
+        i += 2; continue;
+      }
+      if (inForeignDisp) {
+        groups.push({ chars: [';'], label: '、', type: 'kana' });
+        i++; continue;
+      }
+      // 通常の外字符
+      inAlpha = true;
+      groups.push({ chars: [';'], label: '外字', type: 'symbol' });
+      i++; continue;
+    }
+
+    // 英字モード
+    if (inAlpha && /^[A-Z,']$/.test(ch)) {
+      if (ch === ',' && chars[i+1] === ',') {
+        // 二重大文字符 ,,
+        groups.push({ chars: [',',','], label: '二重大', type: 'symbol' });
+        i += 2; continue;
+      }
+      if (ch === ',') {
+        groups.push({ chars: [','], label: '大', type: 'symbol' });
+        i++; continue;
+      }
+      groups.push({ chars: [ch], label: ch.toLowerCase(), type: 'alpha' });
+      // 次の文字も英字・アポストロフィなら inAlpha 維持
+      const nxtAlpha = chars[i+1];
+      if (!inForeignDisp && !(nxtAlpha && /^[A-Z']$/.test(nxtAlpha))) inAlpha = false;
+      i++; continue;
+    }
+
+    // 濁音符 " → 次を見てグループ化
+    if (ch === '"') {
+      const nxt = chars[i+1];
+      const nxt2 = chars[i+2];
+      // 2文字括弧: "7 = 〔
+      if (nxt === '7') {
+        groups.push({ chars: ['"','7'], label: '〔', type: 'kana' });
+        i += 2; continue;
+      }
+      if (nxt === '@' && nxt2) {
+        // 濁音拗音: " @ X → 3マス
+        const yoon = yoonLabel(nxt2);
+        const label = dakuLabel(yoon);
+        groups.push({ chars: ['"','@',nxt2], label, type: 'kana' });
+        i += 3;
+      } else if (nxt === '^' && nxt2) {
+        // 濁音付き小字符: " ^ X → 3マス（まれなケース）
+        const label = '^' + (BSE_TO_KANA[nxt2] || nxt2);
+        groups.push({ chars: ['"','^',nxt2], label, type: 'kana' });
+        i += 3;
+      } else if (nxt) {
+        // 濁音: " X → 2マス
+        const base = BSE_TO_KANA[nxt] || nxt;
+        const label = DAKU_LABEL[base] || base;
+        groups.push({ chars: ['"', nxt], label, type: 'kana' });
+        i += 2;
+      } else {
+        groups.push({ chars: ['"'], label: '濁', type: 'symbol' });
+        i++;
+      }
+      continue;
+    }
+
+    // 濁音付き小字符 ^
+    if (ch === '^') {
+      const nxt = chars[i+1];
+      if (nxt) {
+        const yoon = yoonLabel(nxt);
+        const label = dakuLabel(yoon);
+        groups.push({ chars: ['^', nxt], label, type: 'kana' });
+        i += 2;
+      } else {
+        groups.push({ chars: ['^'], label: '濁小', type: 'symbol' });
+        i++;
+      }
+      continue;
+    }
+
+    // 小字符 @
+    if (ch === '@') {
+      const nxt = chars[i+1];
+      if (nxt) {
+        const label = yoonLabel(nxt);
+        groups.push({ chars: ['@', nxt], label, type: 'kana' });
+        i += 2;
+      } else {
+        groups.push({ chars: ['@'], label: '小', type: 'symbol' });
+        i++;
+      }
+      continue;
+    }
+
+    // 4 = 句点（。）またはヴ行前置符（次の文字で判別）
+    if (ch === '4') {
+      const nxt = chars[i+1];
+      const VU_LABEL = {
+        // ヴ行
+        'U':'ヴぁ', 'V':'ヴぃ', '&':'ヴぇ', '!':'ヴぉ',
+        // ぐ行
+        '*':'ぐぁ', '<':'ぐぃ', '$':'ぐぇ', '[':'ぐぉ',
+      };
+      if (nxt && VU_LABEL[nxt]) {
+        // ヴ行前置符
+        groups.push({ chars: ['4', nxt], label: VU_LABEL[nxt], type: 'kana' });
+        i += 2;
+      } else {
+        // 句点
+        groups.push({ chars: ['4'], label: '。', type: 'kana' });
+        i++;
+      }
+      continue;
+    }
+
+    // 5前置符（ふ行・く行・つ行・ぐ行以外）
+    if (ch === '5') {
+      const nxt = chars[i+1];
+      const FIVE_LABEL = {
+        // ふ行
+        'U':'ふぁ', 'V':'ふぃ', '&':'ふぇ', '!':'ふぉ',
+        // く行
+        '*':'くぁ', '<':'くぃ', '$':'くぇ', '[':'くぉ',
+        // つ行
+        'O':'つぁ', 'R':'つぃ', 'Q':'つぇ', 'T':'つぉ',
+      };
+      if (nxt && FIVE_LABEL[nxt]) {
+        groups.push({ chars: ['5', nxt], label: FIVE_LABEL[nxt], type: 'kana' });
+        i += 2;
+      } else if (nxt) {
+        groups.push({ chars: ['5', nxt], label: '5+'+(BSE_TO_KANA[nxt]||nxt), type: 'kana' });
+        i += 2;
+      } else {
+        groups.push({ chars: ['5'], label: '5前', type: 'symbol' });
+        i++;
+      }
+      continue;
+    }
+
+    // 半濁音符 , .
+    if (ch === ',' || ch === '.') {
+      const nxt = chars[i+1];
+      const nxt2 = chars[i+2];
+      // 2文字括弧閉じ: ,2 = 〉
+      if (ch === ',' && nxt === '2') {
+        groups.push({ chars: [',','2'], label: '〉', type: 'kana' });
+        i += 2; continue;
+      }
+      if (ch === ',' && nxt === ',') {
+        // 二重大文字符 ,, → 英字モードへ
+        inAlpha = true;
+        groups.push({ chars: [',',','], label: '二重大', type: 'symbol' });
+        i += 2; continue;
+      } else if (ch === ',' && nxt === '@' && nxt2) {
+        // 半濁音拗音: , @ X → 3マス
+        const base = BSE_TO_KANA[nxt2] || nxt2;
+        const label = HANDAKU_LABEL[base] || base;
+        groups.push({ chars: [ch,'@',nxt2], label, type: 'kana' });
+        i += 3;
+      } else if (ch === '.' && nxt === '@' && nxt2) {
+        // 半濁音拗音: . @ X → 3マス
+        const base = BSE_TO_KANA[nxt2] || nxt2;
+        const label = HANDAKU_LABEL[base] || base;
+        groups.push({ chars: [ch,'@',nxt2], label, type: 'kana' });
+        i += 3;
+      } else if (nxt && BSE_TO_KANA[nxt]) {
+        // 半濁音: . X → 2マス
+        const base = BSE_TO_KANA[nxt];
+        const label = HANDAKU_LABEL[base] || base;
+        groups.push({ chars: [ch, nxt], label, type: 'kana' });
+        i += 2;
+      } else {
+        if (ch === ',') inAlpha = true; // 大文字符 → 英字モードへ
+        groups.push({ chars: [ch], label: ch === ',' ? '大' : '半', type: 'symbol' });
+        i++;
+      }
+      continue;
+    }
+
+    // _> = ヴょ、_N = でゅ（始行符と区別）
+    if (ch === '_') {
+      const nxt = chars[i+1];
+      if (nxt === '>') {
+        groups.push({ chars: ['_', '>'], label: 'ヴょ', type: 'kana' });
+        i += 2; continue;
+      } else if (nxt === 'N') {
+        groups.push({ chars: ['_', 'N'], label: 'でゅ', type: 'kana' });
+        i += 2; continue;
+      }
+    }
+
+    // 2文字括弧閉じ: "7=〔, 71=〕, 72=》, -2=』
+    if (ch === '"' && chars[i+1] === '7') {
+      groups.push({ chars: ['"','7'], label: '〔', type: 'kana' });
+      i += 2; continue;
+    }
+    if (ch === '7' && chars[i+1] === '1') {
+      groups.push({ chars: ['7','1'], label: '〕', type: 'kana' });
+      i += 2; continue;
+    }
+    if (ch === '7' && chars[i+1] === '2') {
+      groups.push({ chars: ['7','2'], label: '》', type: 'kana' });
+      i += 2; continue;
+    }
+    if (ch === '-' && chars[i+1] === '2') {
+      groups.push({ chars: ['-','2'], label: '』', type: 'kana' });
+      i += 2; continue;
+    }
+
+    // 通常1マス
+    const lbl = LABEL[ch] || ch;
+    groups.push({ chars: [ch], label: lbl, type: 'kana' });
+    i++;
+  }
+  return groups;
+}
+
+// 拗音ラベル: BSE文字 → きゃ/きゅ/きょ など
+function yoonLabel(bse) {
+  const SHO_A = {'*':'かゃ',':':'さゃ','O':'たゃ','K':'なゃ','U':'はゃ','Z':'まゃ','E':'らゃ'};
+  const SHO_U = {'%':'くゅ','?':'すゅ','N':'つゅ','M':'ぬゅ','X':'ふゅ','Y':'むゅ','D':'るゅ'};
+  const SHO_O = {'[':'こょ','W':'そょ','T':'とょ','S':'のょ','!':'ほょ',')':'もょ','J':'ろょ'};
+  // 拗音
+  const ROW_YA = {
+    '*':'きゃ','%':'きゅ','[':'きょ',
+    ':':'しゃ','?':'しゅ','W':'しょ',
+    'O':'ちゃ','N':'ちゅ','T':'ちょ',
+    'K':'にゃ','M':'にゅ','S':'にょ',
+    'U':'ひゃ','X':'ひゅ','!':'ひょ',
+    'Z':'みゃ','Y':'みゅ',')':'みょ',
+    'E':'りゃ','D':'りゅ','J':'りょ',
+  };
+  // 特殊音（@+本体）ゅ段・特殊
+  const TOKUSYU = {
+    'F':'いぇ', '$':'きぇ', ']':'しぇ', 'Q':'ちぇ',
+    'P':'にぇ', '&':'ひぇ',
+    '*':'くぁ', '<':'くぃ', '[':'くぉ',
+    'R':'すぃ', '+':'てゅ', 'N':'とぅ',
+  };
+  return TOKUSYU[bse] || ROW_YA[bse] || BSE_TO_KANA[bse] || bse;
+}
+
+// 濁音ラベル
+const DAKU_LABEL = {
+  'か':'が','き':'ぎ','く':'ぐ','け':'げ','こ':'ご',
+  'さ':'ざ','し':'じ','す':'ず','せ':'ぜ','そ':'ぞ',
+  'た':'だ','ち':'ぢ','つ':'づ','て':'で','と':'ど',
+  'は':'ば','ひ':'び','ふ':'ぶ','へ':'べ','ほ':'ぼ',
+  'きゃ':'ぎゃ','きゅ':'ぎゅ','きょ':'ぎょ',
+  'しゃ':'じゃ','しゅ':'じゅ','しょ':'じょ',
+  'ちゃ':'ぢゃ','ちゅ':'ぢゅ','ちょ':'ぢょ',
+  'ひゃ':'びゃ','ひゅ':'びゅ','ひょ':'びょ',
+  // 特殊音の濁音
+  'しぇ':'じぇ','ちぇ':'ぢぇ',
+  'すぃ':'ずぃ','てぃ':'でぃ','とぅ':'どぅ',
+  'てゅ':'でゅ',
+};
+function dakuLabel(base) { return DAKU_LABEL[base] || base; }
+
+// 半濁音ラベル
+const HANDAKU_LABEL = {
+  'は':'ぱ','ひ':'ぴ','ふ':'ぷ','へ':'ぺ','ほ':'ぽ',
+  'はゃ':'ぴゃ','ふゅ':'ぴゅ','ほょ':'ぴょ',
+  // ふぁ行（実測値: .+本体）
+  'あ':'ふぁ', 'い':'ふぃ', 'え':'ふぇ', 'お':'ふぉ',
+  'ゆ':'ふゅ',
+  // てゅ（.N）
+  'つ':'てゅ',
+};
+
+function renderOutput() {
+  if (!currentBSELines.length) return;
+  const rtl = currentMode === 'concave';
+  let html = '';
+
+  for (const {bse} of currentBSELines) {
+    // 完全に空の行（スペースも含めて何もない）のみ空マス1つ表示
+    if (bse === '' || bse === undefined) {
+      html += `<div class="braille-line"><div class="braille-row">${makeSVG([], currentMode)}</div></div>`;
+      continue;
+    }
+
+    const groups = bseToGroups(bse);
+    html += `<div class="braille-line">`;
+    if (showRuby) html += `<div class="line-ruby">${escHtml(bse)}</div>`;
+    html += `<div class="braille-row${rtl?' rtl':''}">`;
+
+    for (const group of groups) {
+      const n = group.chars.length;
+      if (n === 1) {
+        // 1マス: 通常通り
+        const ch = group.chars[0];
+        const d = BSE_DOTS[ch] || [];
+        if (ch === ' ') {
+          html += `<div class="cell">${makeSVG([], currentMode)}<div class="cell-label">□</div></div>`;
+        } else {
+          html += `<div class="cell">${makeSVG(d, currentMode)}<div class="cell-label">${escHtml(group.label)}</div></div>`;
+        }
+      } else {
+        // 複数マス: マスを並べて、ラベルは真ん中のマスだけに表示
+        // 凹式のときはグループ内も逆順にする
+        const displayChars = rtl ? [...group.chars].reverse() : group.chars;
+        const mid = Math.floor(n / 2);
+        html += `<div style="display:flex;gap:3px;">`;
+        for (let j = 0; j < n; j++) {
+          const ch = displayChars[j];
+          const d = BSE_DOTS[ch] || [];
+          const lbl = j === mid ? escHtml(group.label) : '　';
+          html += `<div class="cell">${makeSVG(d, currentMode)}<div class="cell-label">${lbl}</div></div>`;
+        }
+        html += `</div>`;
+      }
+    }
+
+    html += `</div></div>`;
+  }
+
+  document.getElementById('braille-output').innerHTML = html;
+}
+
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ===== ファイル操作 =====
+// ===== BSE → かな 逆変換 =====
+const BSE_TO_KANA = {
+  'A':'あ','B':'い','C':'う','F':'え','I':'お',
+  '*':'か','<':'き','%':'く','$':'け','[':'こ',
+  ':':'さ','\\':'し','?':'す',']':'せ','W':'そ',
+  'O':'た','R':'ち','N':'つ','Q':'て','T':'と',
+  'K':'な','L':'に','M':'ぬ','P':'ね','S':'の',
+  'U':'は','V':'ひ','X':'ふ','&':'へ','!':'ほ',
+  'Z':'ま','(':'み','Y':'む','=':'め',')':'も',
+  '/':'や','+':'ゆ','>':'よ',
+  'E':'ら','H':'り','D':'る','G':'れ','J':'ろ',
+  "'":"わ",'9':'を','0':'ん',
+  '1':'っ','3':'ー','4':'。',';':'、',
+  '7':'（','8':'《外引開》','0':'ん',
+  '#':'《数》',',':'《大》','.':'《半》',
+  '@':'《小》','^':'《濁小》','"':'《濁》',
+  ' ':'　',
+};
+
+// 数字モード用
+const BSE_TO_NUM = {
+  'A':'1','B':'2','C':'3','D':'4','E':'5',
+  'F':'6','G':'7','H':'8','I':'9','J':'0',
+};
+
+// 拗音の逆引き: 小字符(@)+BSE文字 → かな
+// @+: → さ行あ段, @+? → さ行う段, @+W → さ行お段 など
+// BSE文字からどの行のどの段かを判断
+const BSE_TO_ROW_VOWEL = {
+  // あ段
+  'A':'あ','*':'か',':':'さ','O':'た','K':'な','U':'は','Z':'ま','/':'や','E':'ら',"'":'わ',
+  // い段
+  'B':'い','<':'き','\\':'し','R':'ち','L':'に','V':'ひ','(':'み','H':'り',
+  // う段
+  'C':'う','%':'く','?':'す','N':'つ','M':'ぬ','X':'ふ','Y':'む','+':'ゆ','D':'る',
+  // え段
+  'F':'え','$':'け',']':'せ','Q':'て','P':'ね','&':'へ','=':'め','G':'れ',
+  // お段
+  'I':'お','[':'こ','W':'そ','T':'と','S':'の','!':'ほ',')':'も','>':'よ','J':'ろ',
+};
+
+// 行のあ/う/お段を返す
+const ROW_AUO = {
+  'か':['か','く','こ'],'さ':['さ','す','そ'],'た':['た','つ','と'],
+  'な':['な','ぬ','の'],'は':['は','ふ','ほ'],'ま':['ま','む','も'],
+  'ら':['ら','る','ろ'],
+};
+const VOWEL_TO_IDX = {'あ':0,'い':0,'う':1,'え':1,'お':2};
+
+function bseToKana(bseLine) {
+  const chars = [...bseLine];
+  let result = '';
+  let i = 0;
+  let inNum = false, inForeign = false, inAlpha = false;
+
+  // 拗音テーブル: BSE文字 → あ段/う段/お段のかな
+  const SHO_A = {'*':'か',':':'さ','O':'た','K':'な','U':'は','Z':'ま','E':'ら'};
+  const SHO_U = {'%':'く','?':'す','N':'つ','M':'ぬ','X':'ふ','Y':'む','D':'る'};
+  const SHO_O = {'[':'こ','W':'そ','T':'と','S':'の','!':'ほ',')':'も','J':'ろ'};
+
+  // 小字符+BSEかな → 拗音
+  const YOON = (bse) => {
+    if (bse in SHO_A) return SHO_A[bse] + 'ゃ';
+    if (bse in SHO_U) return SHO_U[bse] + 'ゅ';
+    if (bse in SHO_O) return SHO_O[bse] + 'ょ';
+    return BSE_TO_KANA[bse] || bse;
+  };
+
+  // 濁音変換
+  const DAKU_MAP = {
+    'か':'が','き':'ぎ','く':'ぐ','け':'げ','こ':'ご',
+    'さ':'ざ','し':'じ','す':'ず','せ':'ぜ','そ':'ぞ',
+    'た':'だ','ち':'ぢ','つ':'づ','て':'で','と':'ど',
+    'は':'ば','ひ':'び','ふ':'ぶ','へ':'べ','ほ':'ぼ',
+    'かゃ':'がゃ','かゅ':'がゅ','かょ':'がょ',
+    'さゃ':'ざゃ','さゅ':'ざゅ','さょ':'ざょ',
+    'たゃ':'だゃ','たゅ':'だゅ','たょ':'だょ',
+  };
+
+  // 半濁音変換
+  const HANDAKU_MAP = {'は':'ぱ','ひ':'ぴ','ふ':'ぷ','へ':'ぺ','ほ':'ぽ'};
+
+  while (i < chars.length) {
+    const ch = chars[i];
+
+    // スペース
+    if (ch === ' ') {
+      result += '　'; inNum = false;
+      if (!inForeign) inAlpha = false;
+      i++; continue;
+    }
+
+    // 数符
+    if (ch === '#') { inNum = true; inAlpha = false; i++; continue; }
+
+    // 外国語引用符開始
+    if (ch === '8') { inForeign = true; inAlpha = true; i++; continue; }
+
+    // 数字モード
+    if (inNum) {
+      if (ch in BSE_TO_NUM) { result += BSE_TO_NUM[ch]; i++; continue; }
+      inNum = false;
+    }
+
+    // 外国語引用符終了
+    if (ch === '0' && inForeign) { inForeign = false; inAlpha = false; i++; continue; }
+
+    // 英字符（;）— 2文字括弧を優先
+    if (ch === ';') {
+      if (inForeign) { result += '、'; i++; continue; }
+      const nxt = chars[i+1];
+      if (nxt === "'") { result += '〈'; i += 2; continue; }
+      if (nxt === '-') { result += '『'; i += 2; continue; }
+      if (nxt === '7') { result += '《'; i += 2; continue; }
+      inAlpha = true; i++; continue;
+    }
+
+    // 英字モード中
+    if (inAlpha && /^[A-Z,']$/.test(ch)) {
+      if (ch === ',' && chars[i+1] === ',') { i += 2; continue; } // 二重大文字符スキップ
+      if (ch === ',') { i++; continue; } // 大文字符スキップ
+      // アポストロフィ込みで単語が続く間は英字モード維持
+      result += ch.toLowerCase();
+      // 次の文字も英字またはアポストロフィなら inAlpha 継続
+      const nxtCh = chars[i+1];
+      if (!inForeign && !(nxtCh && /^[A-Z']$/.test(nxtCh))) inAlpha = false;
+      i++; continue;
+    }
+
+    // 濁音符 "
+    if (ch === '"') {
+      const nxt = chars[i+1];
+      const nxt2 = chars[i+2];
+      // 2文字括弧: "7 = 〔
+      if (nxt === '7') { result += '〔'; i += 2; continue; }
+      if (nxt === '@' && nxt2) {
+        // 濁音+小字符+本体 → 濁音拗音
+        const yoon = YOON(nxt2);
+        const daku_yoon = DAKU_MAP[yoon] || (DAKU_MAP[yoon[0]] ? DAKU_MAP[yoon[0]] + yoon.slice(1) : yoon);
+        result += daku_yoon;
+        i += 3;
+      } else if (nxt && nxt in BSE_TO_KANA) {
+        // 濁音+本体 → 濁音かな
+        const base = BSE_TO_KANA[nxt];
+        result += DAKU_MAP[base] || base;
+        i += 2;
+      } else {
+        i++;
+      }
+      continue;
+    }
+
+    // 濁音付き小字符 ^
+    if (ch === '^') {
+      const nxt = chars[i+1];
+      if (nxt) {
+        const yoon = YOON(nxt);
+        const daku_yoon = DAKU_MAP[yoon[0]] ? DAKU_MAP[yoon[0]] + yoon.slice(1) : yoon;
+        result += daku_yoon;
+        i += 2;
+      } else { i++; }
+      continue;
+    }
+
+    // 小字符 @
+    if (ch === '@') {
+      const nxt = chars[i+1];
+      if (nxt) {
+        result += YOON(nxt);
+        i += 2;
+      } else { i++; }
+      continue;
+    }
+
+    // 半濁音符 , .
+    if (ch === ',' || ch === '.') {
+      const nxt = chars[i+1];
+      // 2文字括弧: ,2 = 〉
+      if (ch === ',' && nxt === '2') { result += '〉'; i += 2; continue; }
+      if (ch === ',' && nxt === ',') {
+        // 二重大文字符 → 英字モードへ
+        inAlpha = true; i += 2; continue;
+      }
+      if (nxt === '@') {
+        // 半濁音+小字符+本体 → 半濁音拗音
+        const nxt2 = chars[i+2];
+        if (nxt2) {
+          const base = BSE_TO_KANA[nxt2];
+          result += (HANDAKU_MAP[base] || base);
+          i += 3;
+        } else { i++; }
+      } else if (nxt && nxt in BSE_TO_KANA) {
+        const base = BSE_TO_KANA[nxt];
+        result += HANDAKU_MAP[base] || base;
+        i += 2;
+      } else {
+        // 大文字符として次を大文字に（英語内では処理済み）
+        if (ch === ',') inAlpha = true;
+        i++;
+      }
+      continue;
+    }
+
+    // 2文字括弧: "7=〔, 71=〕, 72=》, -2=』
+    if (ch === '"' && chars[i+1] === '7') { result += '〔'; i += 2; continue; }
+    if (ch === '7' && chars[i+1] === '1') { result += '〕'; i += 2; continue; }
+    if (ch === '7' && chars[i+1] === '2') { result += '》'; i += 2; continue; }
+    if (ch === '-' && chars[i+1] === '2') { result += '』'; i += 2; continue; }
+
+    // 通常かな
+    if (ch in BSE_TO_KANA) {
+      result += BSE_TO_KANA[ch]; i++; continue;
+    }
+
+    i++;
+  }
+  return result;
+}
+
+function loadBSE() {
+  document.getElementById('bse-input').click();
+}
+
+function onBSELoad(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  currentFilename = file.name;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const raw = ev.target.result;
+    const text = raw.length > 504 ? raw.slice(504) : raw;
+    const lines = text.split(/\r?\n/);
+
+    currentBSELines = lines
+      .filter(l => !/^\d+$/.test(l.trim()))
+      .map(l => {
+        // 先頭スペースをそのままBSEとして保持（スペース数が意味を持つため）
+        return { orig: '', bse: l };
+      });
+
+    // 逆変換してテキストエリアに表示
+    const decoded = currentBSELines
+      .map(l => bseToKana(l.bse))
+      .join('\n');
+    document.getElementById('input-text').value = decoded;
+
+    // BSEプレビュー表示
+    const preview = document.getElementById('bse-preview');
+    preview.style.display = 'block';
+    preview.textContent = currentBSELines.map(l => l.bse).join('\n');
+
+    renderOutput();
+
+    document.getElementById('dl-area').style.display = '';
+  };
+  reader.readAsText(file, 'ascii');
+}
+
+function loadTxt() {
+  document.getElementById('txt-input').click();
+}
+
+function onTxtLoad(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  currentFilename = file.name.replace('.txt', '.bse');
+  const reader = new FileReader();
+  reader.onload = ev => {
+    document.getElementById('input-text').value = ev.target.result;
+    convert();
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function downloadTXT() {
+  const text = document.getElementById('input-text').value;
+  const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = currentFilename.replace('.bse', '.txt');
+  a.click();
+}
+
+function downloadBSE() {
+  // BSEファイルが直接読み込まれた場合はそのまま出力
+  // テキストから変換した場合は再変換して出力
+  const inputText = toHalfWidthAlnum(document.getElementById('input-text').value);
+  const alphaMode = document.querySelector('input[name="alpha"]:checked').value;
+
+  let bseContent = ' '.repeat(504) + '00013218\r\n';
+
+  if (inputText.startsWith('（BSEファイル読み込み中:')) {
+    // BSE読み込みモード: currentBSELinesのbseをそのまま出力
+    for (const {bse} of currentBSELines) {
+      const row = bse.trim() ? '  ' + bse : '  ';
+      bseContent += row + '\r\n';
+    }
+  } else {
+    // テキスト変換モード
+    const lines = inputText.split('\n');
+    for (const line of lines) {
+      const bse = kanaToBSE(line, alphaMode);
+      const row = bse.trim() ? '  ' + bse : '  ';
+      bseContent += row + '\r\n';
+    }
+  }
+  bseContent += '  \r\n';
+
+  const bytes = new Uint8Array(bseContent.length);
+  for (let i=0;i<bseContent.length;i++) bytes[i] = bseContent.charCodeAt(i);
+  const blob = new Blob([bytes], {type:'application/octet-stream'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = currentFilename;
+  a.click();
+}
+</script>
+</body>
+</html>
