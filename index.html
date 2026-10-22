@@ -31,7 +31,7 @@ body {
 }
 
 .app {
-  max-width: 900px;
+  max-width: 1040px;
   margin: 0 auto;
 }
 
@@ -193,6 +193,7 @@ textarea:focus { border-color: #999; background: var(--surface); }
 /* 点字表示 */
 #braille-output {
   min-height: 80px;
+  overflow-x: auto;
 }
 
 .braille-line {
@@ -210,7 +211,8 @@ textarea:focus { border-color: #999; background: var(--surface); }
 .braille-row {
   display: flex;
   gap: 3px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  margin-bottom: 6px;
 }
 .braille-row.rtl { flex-direction: row-reverse; }
 
@@ -375,7 +377,7 @@ for (const [row, vs] of Object.entries(ROW_VOWELS)) vs.forEach(v => ROW_BASE[v] 
 const SMALL_IDX = {'ゃ':0,'ゅ':2,'ょ':4};
 const SPECIAL = {
   // てぃ・でぃ・とぅ・どぅ（既存）
-  'てぃ':'@R', 'でぃ':'^R', 'とぅ':'@N', 'どぅ':'^N',
+  'てぃ':'@R', 'でぃ':'^R', 'とぅ':'5N', 'どぅ':'4N',
   // ふ行（実測値）
   'ふぁ':'5U', 'ふぃ':'5V', 'ふぇ':'5&', 'ふぉ':'5!', 'ふゅ':'.+',
   // く行（実測値）
@@ -1101,7 +1103,8 @@ function bseToGroups(bse) {
         groups.push({ chars: [';','7'], label: '《', type: 'kana' });
         i += 2; continue;
       }
-      if (inForeignDisp) {
+      if (inForeignDisp || nxt === undefined || nxt === ' ') {
+        // 引用符内、またはスペース・行末の前の ; は読点
         groups.push({ chars: [';'], label: '、', type: 'kana' });
         i++; continue;
       }
@@ -1199,6 +1202,8 @@ function bseToGroups(bse) {
         'U':'ヴぁ', 'V':'ヴぃ', '&':'ヴぇ', '!':'ヴぉ',
         // ぐ行
         '*':'ぐぁ', '<':'ぐぃ', '$':'ぐぇ', '[':'ぐぉ',
+        // どぅ
+        'N':'どぅ',
       };
       if (nxt && VU_LABEL[nxt]) {
         // ヴ行前置符
@@ -1222,6 +1227,8 @@ function bseToGroups(bse) {
         '*':'くぁ', '<':'くぃ', '$':'くぇ', '[':'くぉ',
         // つ行
         'O':'つぁ', 'R':'つぃ', 'Q':'つぇ', 'T':'つぉ',
+        // とぅ
+        'N':'とぅ',
       };
       if (nxt && FIVE_LABEL[nxt]) {
         groups.push({ chars: ['5', nxt], label: FIVE_LABEL[nxt], type: 'kana' });
@@ -1252,13 +1259,13 @@ function bseToGroups(bse) {
         i += 2; continue;
       } else if (ch === ',' && nxt === '@' && nxt2) {
         // 半濁音拗音: , @ X → 3マス
-        const base = BSE_TO_KANA[nxt2] || nxt2;
+        const base = yoonLabel(nxt2);
         const label = HANDAKU_LABEL[base] || base;
         groups.push({ chars: [ch,'@',nxt2], label, type: 'kana' });
         i += 3;
       } else if (ch === '.' && nxt === '@' && nxt2) {
         // 半濁音拗音: . @ X → 3マス
-        const base = BSE_TO_KANA[nxt2] || nxt2;
+        const base = yoonLabel(nxt2);
         const label = HANDAKU_LABEL[base] || base;
         groups.push({ chars: [ch,'@',nxt2], label, type: 'kana' });
         i += 3;
@@ -1333,8 +1340,7 @@ function yoonLabel(bse) {
   const TOKUSYU = {
     'F':'いぇ', '$':'きぇ', ']':'しぇ', 'Q':'ちぇ',
     'P':'にぇ', '&':'ひぇ',
-    '*':'くぁ', '<':'くぃ', '[':'くぉ',
-    'R':'すぃ', '+':'てゅ', 'N':'とぅ',
+    'R':'てぃ', '\\':'すぃ',
   };
   return TOKUSYU[bse] || ROW_YA[bse] || BSE_TO_KANA[bse] || bse;
 }
@@ -1359,13 +1365,97 @@ function dakuLabel(base) { return DAKU_LABEL[base] || base; }
 // 半濁音ラベル
 const HANDAKU_LABEL = {
   'は':'ぱ','ひ':'ぴ','ふ':'ぷ','へ':'ぺ','ほ':'ぽ',
-  'はゃ':'ぴゃ','ふゅ':'ぴゅ','ほょ':'ぴょ',
+  'ひゃ':'ぴゃ','ひゅ':'ぴゅ','ひょ':'ぴょ',
   // ふぁ行（実測値: .+本体）
   'あ':'ふぁ', 'い':'ふぃ', 'え':'ふぇ', 'お':'ふぉ',
   'ゆ':'ふゅ',
   // てゅ（.N）
   'つ':'てゅ',
 };
+
+// 1行に打てるマス数（点字原稿の1行＝32マス）
+const CELLS_PER_LINE = 32;
+
+// グループ列を32マス以内の行に分ける。
+// 語（スペースで区切られたまとまり）の途中では切らず、手前のスペースで改行する。
+// 改行位置のスペースは捨て、次の行は行頭（1マス目）から始める。
+// 1語だけで32マスを超える場合に限り、32マスで切る（記号のまとまりは分けない）。
+function wrapGroups(groups, maxCells = CELLS_PER_LINE) {
+  const isSpace = g => g.type === 'space';
+  // 語とスペース列のトークンに分ける
+  const tokens = [];
+  for (const g of groups) {
+    const sp = isSpace(g);
+    const last = tokens[tokens.length - 1];
+    if (last && last.space === sp) last.groups.push(g);
+    else tokens.push({ space: sp, groups: [g] });
+  }
+  const cellsOf = gs => gs.reduce((n, g) => n + g.chars.length, 0);
+
+  const lines = [];
+  let cur = [], curCells = 0, pendingSpace = [];
+  const pushLine = () => { lines.push(cur); cur = []; curCells = 0; };
+
+  for (const tok of tokens) {
+    if (tok.space) {
+      // 行頭のスペース（字下げ）はそのまま、行中のスペースは次の語と一緒に置く
+      if (curCells === 0 && lines.length === 0) {
+        cur.push(...tok.groups); curCells += cellsOf(tok.groups);
+      } else {
+        pendingSpace = tok.groups;
+      }
+      continue;
+    }
+    const wordCells = cellsOf(tok.groups);
+    const spaceCells = curCells > 0 ? cellsOf(pendingSpace) : 0;
+    if (curCells > 0 && curCells + spaceCells + wordCells > maxCells) {
+      // 手前のスペースで改行
+      pushLine();
+    } else if (curCells > 0) {
+      cur.push(...pendingSpace); curCells += spaceCells;
+    }
+    pendingSpace = [];
+    // 語を置く（32マスを超える長い語だけは途中で切る）
+    for (const g of tok.groups) {
+      if (curCells > 0 && curCells + g.chars.length > maxCells) pushLine();
+      cur.push(g); curCells += g.chars.length;
+    }
+  }
+  if (cur.length || lines.length === 0) lines.push(cur);
+  return lines;
+}
+
+function renderGroupsRow(groups, rtl) {
+  let html = `<div class="braille-row${rtl?' rtl':''}">`;
+  if (!groups.length) html += makeSVG([], currentMode);
+  for (const group of groups) {
+    const n = group.chars.length;
+    if (n === 1) {
+      // 1マス: 通常通り
+      const ch = group.chars[0];
+      const d = BSE_DOTS[ch] || [];
+      if (ch === ' ') {
+        html += `<div class="cell">${makeSVG([], currentMode)}<div class="cell-label">□</div></div>`;
+      } else {
+        html += `<div class="cell">${makeSVG(d, currentMode)}<div class="cell-label">${escHtml(group.label)}</div></div>`;
+      }
+    } else {
+      // 複数マス: マスを並べて、ラベルは真ん中のマスだけに表示
+      // 凹式のときはグループ内も逆順にする
+      const displayChars = rtl ? [...group.chars].reverse() : group.chars;
+      const mid = Math.floor(n / 2);
+      html += `<div style="display:flex;gap:3px;">`;
+      for (let j = 0; j < n; j++) {
+        const ch = displayChars[j];
+        const d = BSE_DOTS[ch] || [];
+        const lbl = j === mid ? escHtml(group.label) : '　';
+        html += `<div class="cell">${makeSVG(d, currentMode)}<div class="cell-label">${lbl}</div></div>`;
+      }
+      html += `</div>`;
+    }
+  }
+  return html + `</div>`;
+}
 
 function renderOutput() {
   if (!currentBSELines.length) return;
@@ -1375,43 +1465,21 @@ function renderOutput() {
   for (const {bse} of currentBSELines) {
     // 完全に空の行（スペースも含めて何もない）のみ空マス1つ表示
     if (bse === '' || bse === undefined) {
-      html += `<div class="braille-line"><div class="braille-row">${makeSVG([], currentMode)}</div></div>`;
+      html += `<div class="braille-line">${renderGroupsRow([], false)}</div>`;
       continue;
     }
 
     const groups = bseToGroups(bse);
+    const rows = wrapGroups(groups);
     html += `<div class="braille-line">`;
-    if (showRuby) html += `<div class="line-ruby">${escHtml(bse)}</div>`;
-    html += `<div class="braille-row${rtl?' rtl':''}">`;
-
-    for (const group of groups) {
-      const n = group.chars.length;
-      if (n === 1) {
-        // 1マス: 通常通り
-        const ch = group.chars[0];
-        const d = BSE_DOTS[ch] || [];
-        if (ch === ' ') {
-          html += `<div class="cell">${makeSVG([], currentMode)}<div class="cell-label">□</div></div>`;
-        } else {
-          html += `<div class="cell">${makeSVG(d, currentMode)}<div class="cell-label">${escHtml(group.label)}</div></div>`;
-        }
-      } else {
-        // 複数マス: マスを並べて、ラベルは真ん中のマスだけに表示
-        // 凹式のときはグループ内も逆順にする
-        const displayChars = rtl ? [...group.chars].reverse() : group.chars;
-        const mid = Math.floor(n / 2);
-        html += `<div style="display:flex;gap:3px;">`;
-        for (let j = 0; j < n; j++) {
-          const ch = displayChars[j];
-          const d = BSE_DOTS[ch] || [];
-          const lbl = j === mid ? escHtml(group.label) : '　';
-          html += `<div class="cell">${makeSVG(d, currentMode)}<div class="cell-label">${lbl}</div></div>`;
-        }
-        html += `</div>`;
+    for (const rowGroups of rows) {
+      if (showRuby) {
+        const rowBSE = rowGroups.map(g => g.chars.join('')).join('');
+        html += `<div class="line-ruby">${escHtml(rowBSE)}</div>`;
       }
+      html += renderGroupsRow(rowGroups, rtl);
     }
-
-    html += `</div></div>`;
+    html += `</div>`;
   }
 
   document.getElementById('braille-output').innerHTML = html;
@@ -1484,12 +1552,7 @@ function bseToKana(bseLine) {
   const SHO_O = {'[':'こ','W':'そ','T':'と','S':'の','!':'ほ',')':'も','J':'ろ'};
 
   // 小字符+BSEかな → 拗音
-  const YOON = (bse) => {
-    if (bse in SHO_A) return SHO_A[bse] + 'ゃ';
-    if (bse in SHO_U) return SHO_U[bse] + 'ゅ';
-    if (bse in SHO_O) return SHO_O[bse] + 'ょ';
-    return BSE_TO_KANA[bse] || bse;
-  };
+  const YOON = (bse) => yoonLabel(bse);
 
   // 濁音変換
   const DAKU_MAP = {
@@ -1537,6 +1600,7 @@ function bseToKana(bseLine) {
       if (nxt === "'") { result += '〈'; i += 2; continue; }
       if (nxt === '-') { result += '『'; i += 2; continue; }
       if (nxt === '7') { result += '《'; i += 2; continue; }
+      if (nxt === undefined || nxt === ' ') { result += '、'; i++; continue; } // 読点
       inAlpha = true; i++; continue;
     }
 
@@ -1587,6 +1651,16 @@ function bseToKana(bseLine) {
       continue;
     }
 
+    // 前置符 5（点2,6）・4（点2,5,6）の特殊音
+    if (ch === '5' || ch === '4') {
+      const PRE = ch === '5'
+        ? {'U':'ふぁ','V':'ふぃ','&':'ふぇ','!':'ふぉ','*':'くぁ','<':'くぃ','$':'くぇ','[':'くぉ',
+           'O':'つぁ','R':'つぃ','Q':'つぇ','T':'つぉ','N':'とぅ'}
+        : {'U':'ヴぁ','V':'ヴぃ','&':'ヴぇ','!':'ヴぉ','*':'ぐぁ','<':'ぐぃ','$':'ぐぇ','[':'ぐぉ','N':'どぅ'};
+      const nxt = chars[i+1];
+      if (nxt && PRE[nxt]) { result += PRE[nxt]; i += 2; continue; }
+    }
+
     // 小字符 @
     if (ch === '@') {
       const nxt = chars[i+1];
@@ -1610,8 +1684,8 @@ function bseToKana(bseLine) {
         // 半濁音+小字符+本体 → 半濁音拗音
         const nxt2 = chars[i+2];
         if (nxt2) {
-          const base = BSE_TO_KANA[nxt2];
-          result += (HANDAKU_MAP[base] || base);
+          const yoon = yoonLabel(nxt2);
+          result += HANDAKU_MAP[yoon[0]] ? HANDAKU_MAP[yoon[0]] + yoon.slice(1) : yoon;
           i += 3;
         } else { i++; }
       } else if (nxt && nxt in BSE_TO_KANA) {
@@ -1709,25 +1783,16 @@ function downloadTXT() {
 function downloadBSE() {
   // BSEファイルが直接読み込まれた場合はそのまま出力
   // テキストから変換した場合は再変換して出力
-  const inputText = toHalfWidthAlnum(document.getElementById('input-text').value);
+  const inputText = document.getElementById('input-text').value;
   const alphaMode = document.querySelector('input[name="alpha"]:checked').value;
 
   let bseContent = ' '.repeat(504) + '00013218\r\n';
 
-  if (inputText.startsWith('（BSEファイル読み込み中:')) {
-    // BSE読み込みモード: currentBSELinesのbseをそのまま出力
-    for (const {bse} of currentBSELines) {
-      const row = bse.trim() ? '  ' + bse : '  ';
-      bseContent += row + '\r\n';
-    }
-  } else {
-    // テキスト変換モード
-    const lines = inputText.split('\n');
-    for (const line of lines) {
-      const bse = kanaToBSE(line, alphaMode);
-      const row = bse.trim() ? '  ' + bse : '  ';
-      bseContent += row + '\r\n';
-    }
+  // テキストから保存するときは、画面と同じ変換（記号の置き換えを含む）を通す
+  if (!currentBSELines.length || currentBSELines.some(l => l.orig !== '')) convert();
+  for (const {bse} of currentBSELines) {
+    const row = bse.trim() ? '  ' + bse : '  ';
+    bseContent += row + '\r\n';
   }
   bseContent += '  \r\n';
 
