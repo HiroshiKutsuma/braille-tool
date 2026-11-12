@@ -251,6 +251,24 @@ footer {
 }
 
 /* BSEプレビュー */
+/* 仮名遣いの注意 */
+.cell.warn svg { background: #c62828; border-radius: 4px; }
+.cell.warn circle.on { fill: #fff; stroke: #fff; }
+.cell.warn circle.off { stroke: rgba(255,255,255,0.55); }
+.cell.warn .cell-label { color: #c62828; font-weight: 600; }
+#kana-warnings { margin-top: 0.75rem; font-size: 13px; }
+#kana-warnings .kw-head { font-weight: 600; color: #c62828; margin-bottom: 6px; }
+#kana-warnings .kw-ok { color: var(--text2); }
+#kana-warnings ul { list-style: none; padding: 0; margin: 0; }
+#kana-warnings li {
+  padding: 6px 10px; margin-bottom: 4px; border-left: 3px solid #c62828;
+  background: #fdecec; border-radius: 4px; cursor: pointer; line-height: 1.6;
+}
+#kana-warnings li:hover { background: #f9d9d9; }
+#kana-warnings .kw-word { font-weight: 600; color: #b71c1c; }
+#kana-warnings .kw-where { color: var(--text2); font-size: 12px; margin-right: 6px; }
+.kw-toggle { font-size: 13px; color: var(--text); display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+
 #bse-preview {
   font-family: monospace;
   font-size: 12px;
@@ -308,6 +326,8 @@ footer {
       <input type="radio" name="alpha" value="foreign"> 外国語引用符
     </label>
     <div class="sep"></div>
+    <label class="kw-toggle"><input type="checkbox" id="kw-enable" checked onchange="convert()"> 仮名遣いの注意</label>
+    <div class="sep"></div>
     <button class="btn" onclick="loadTxt()">txtを開く</button>
     <input type="file" id="txt-input" accept=".txt" style="display:none" onchange="onTxtLoad(event)">
     <button class="btn" onclick="loadBSE()">BSEを開く</button>
@@ -319,6 +339,7 @@ footer {
     </span>
   </div>
   <div id="bse-preview"></div>
+  <div id="kana-warnings" style="display:none"></div>
 </div>
 
 <div class="panel">
@@ -888,7 +909,7 @@ function makeSVG(dots, mode) {
   let c = '';
   for (let i=0;i<6;i++) {
     const on = dots.includes(i+1);
-    c += `<circle cx="${pos[i][0]}" cy="${pos[i][1]}" r="${R}" fill="${on?'var(--dot-on)':'var(--dot-off)'}" stroke="var(--dot-stroke)" stroke-width="1.2"/>`;
+    c += `<circle class="${on?'on':'off'}" cx="${pos[i][0]}" cy="${pos[i][1]}" r="${R}" fill="${on?'var(--dot-on)':'var(--dot-off)'}" stroke="var(--dot-stroke)" stroke-width="1.2"/>`;
   }
   return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${c}</svg>`;
 }
@@ -995,6 +1016,128 @@ function toHalfWidthAlnum(s) {
   return s.replace(/[０-９Ａ-Ｚａ-ｚ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
 }
 
+
+// ===== 仮名遣いの注意（点訳の仮名遣いマニュアル p.16〜24 にもとづく） =====
+// 自動では直さず、気になる語を知らせるだけ。判断は点訳者がする。
+const KW_VOWEL = (() => {
+  const t = {
+    a:'あかさたなはまやらわがざだばぱぁゃ', i:'いきしちにひみりぎじぢびぴぃ',
+    u:'うくすつぬふむゆるぐずづぶぷゔぅゅ', e:'えけせてねへめれげぜでべぺぇ',
+    o:'おこそとのほもよろをごぞどぼぽぉょ',
+  };
+  const m = {};
+  for (const [v, cs] of Object.entries(t)) for (const c of cs) m[c] = v;
+  return m;
+})();
+// p.20「オ」を添える和語（とその派生語・複合語）の語幹
+const KW_OO_WORDS = [
+  'おおかみ','おおせ','おおやけ','こおり','こおろぎ','ほお','ほのお','とお',
+  'いきどお','おおう','こおる','しおおせ','とどこお','もよお','いとお','おおい',
+  'おおき','おおむね','おおよそ','おおめ','おおどお','おおば','よそお','すきとお',
+];
+function kwIsSpace(c) { return c === ' ' || c === '　'; }
+function kwWordAt(line, pos) {
+  let a = pos, b = pos;
+  while (a > 0 && !kwIsSpace(line[a-1])) a--;
+  while (b < line.length && !kwIsSpace(line[b])) b++;
+  return { start: a, end: b, word: line.slice(a, b) };
+}
+function kwInOOWord(line, pos) {
+  // pos の「お」が「オ」を添える和語の中にあるか
+  for (const w of KW_OO_WORDS) {
+    for (let k = Math.max(0, pos - w.length + 1); k <= pos; k++) {
+      if (line.startsWith(w, k)) return true;
+    }
+  }
+  return false;
+}
+
+function checkKana(line) {
+  const out = [];
+  const chars = [...line];  // 行内はほぼ BMP なので添字はそのまま使う
+  const add = (i, len, msg) => out.push({ start: i, end: i + len, msg });
+  const isEndOfWord = j => j >= chars.length || kwIsSpace(chars[j]) || '、。，．！？!?」』）'.includes(chars[j]);
+  for (let i = 0; i < chars.length; i++) {
+    const c = chars[i], p = chars[i-1] || '', n = chars[i+1] || '';
+    const pv = KW_VOWEL[p];
+    const wordStart = i === 0 || kwIsSpace(p) || '「『（'.includes(p);
+
+    // ウ列・オ列の長音（p.18 (2)、p.19 備考2）
+    if (c === 'う' && (pv === 'u' || pv === 'o')) {
+      add(i - 1, 2, '長音なら「ー」で書きます（例: おとうさん → おとーさん）。動詞の語尾など長音でないときは「う」のままです（例: おもう、こうし）。');
+      continue;
+    }
+    // オ列の長音を「お」で書いている（p.20 (3) の一覧にない語）
+    if (c === 'お' && pv === 'o' && !kwInOOWord(line, i)) {
+      add(i - 1, 2, 'オ列の長音は「ー」で書きます。「おおきい」「とおる」など、「オ」を添える語なら「お」のままです。');
+      continue;
+    }
+    // 長音符の連続（p.23 備考）
+    if (c === 'ー' && n === 'ー') {
+      let j = i; while (chars[j] === 'ー') j++;
+      add(i, j - i, '長音符は続けて書けないので、一つだけ書きます（例: へーー → へー）。');
+      i = j - 1; continue;
+    }
+    // 助詞の「は」「へ」（p.18 (1)）
+    if ((c === 'は' || c === 'へ') && !wordStart && p !== c && isEndOfWord(i + 1)) {
+      add(i, 1, c === 'は'
+        ? '助詞の「は」なら「わ」と書きます（例: ぼくは → ぼくわ）。'
+        : '助詞の「へ」なら「え」と書きます（例: えきへ → えきえ）。');
+    }
+    // 小文字の仮名（p.23 (6)）。特殊音にならないものは今は点字にならない
+    if ('ぁぃぅぇぉ'.includes(c)) {
+      const special = SPECIAL[p + c] || SPECIAL[(chars[i-2]||'') + p + c] || p === 'ゔ' || p === 'ヴ';
+      if (!special) {
+        add(i - (p ? 1 : 0), p ? 2 : 1, '小文字が長音を表すときは、長音の書き方に準じて書きます（例: やったぁ → やったあ、おとぅ → おとー）。この小文字は今は点字に出ません。');
+      }
+    }
+    // ゐ・ゑ（p.23 処理）
+    if ('ゐゑヰヱ'.includes(c)) {
+      add(i, 1, '現代文では「' + ('ゐヰ'.includes(c) ? 'い' : 'え') + '」と書きます。');
+    }
+    // ぢ・づ（p.21〜22）
+    if (c === 'ぢ' || c === 'づ') {
+      if (n === 'ゅ') {
+        add(i, 2, '「ぢゅ」は現代語では使いません。「じゅ」と書きます（例: せかいじゅう）。');
+      } else if (wordStart) {
+        add(i, 1, '語頭は「' + (c === 'ぢ' ? 'じ' : 'ず') + '」で書きます（例: ずつう）。');
+      }
+    }
+  }
+  // 語の情報を付ける
+  return out.map(w => {
+    const wd = kwWordAt(line, w.start);
+    let wordIdx = 0;
+    for (let k = 0; k < w.start; k++) if (kwIsSpace(line[k])) wordIdx++;
+    return { ...w, word: wd.word, part: line.slice(w.start, w.end), wordStart: wd.start, wordIdx };
+  });
+}
+
+function renderKanaWarnings() {
+  const box = document.getElementById('kana-warnings');
+  const enabled = document.getElementById('kw-enable').checked;
+  const all = [];
+  currentBSELines.forEach((l, li) => (l.warnings || []).forEach(w => all.push({ ...w, line: li })));
+  if (!enabled || !currentBSELines.some(l => l.orig)) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  if (!all.length) {
+    box.innerHTML = '<div class="kw-ok">仮名遣いの注意はありません。</div>';
+    return;
+  }
+  box.innerHTML = `<div class="kw-head">仮名遣いの注意（${all.length}件）　点字表示では、該当する語を赤で示しています。</div><ul>` +
+    all.map((w, k) => `<li data-k="${k}"><span class="kw-where">${w.line + 1}行目</span><span class="kw-word">「${escHtml(w.word)}」</span>${w.part !== w.word ? 'の「' + escHtml(w.part) + '」' : ''}　${escHtml(w.msg)}</li>`).join('') +
+    '</ul>';
+  box.querySelectorAll('li').forEach(li => li.addEventListener('click', () => {
+    const w = all[+li.dataset.k];
+    const ta = document.getElementById('input-text');
+    const lines = ta.value.split('\n');
+    let off = 0;
+    for (let k = 0; k < w.line; k++) off += lines[k].length + 1;
+    ta.focus();
+    ta.setSelectionRange(off + w.start, off + w.end);
+  }));
+}
+
 function convert() {
   const text = toHalfWidthAlnum(document.getElementById('input-text').value);
   const alphaMode = document.querySelector('input[name="alpha"]:checked').value;
@@ -1023,10 +1166,12 @@ function convert() {
       }
     }).join('');
 
-    return { orig: line, bse };
+    const warnings = document.getElementById('kw-enable').checked ? checkKana(line) : [];
+    return { orig: line, bse, warnings };
   });
 
   renderOutput();
+  renderKanaWarnings();
 
   // BSEプレビュー
   const preview = document.getElementById('bse-preview');
@@ -1437,7 +1582,7 @@ function renderGroupsRow(groups, rtl) {
       if (ch === ' ') {
         html += `<div class="cell">${makeSVG([], currentMode)}<div class="cell-label">□</div></div>`;
       } else {
-        html += `<div class="cell">${makeSVG(d, currentMode)}<div class="cell-label">${escHtml(group.label)}</div></div>`;
+        html += `<div class="cell${group.warn?' warn':''}">${makeSVG(d, currentMode)}<div class="cell-label">${escHtml(group.label)}</div></div>`;
       }
     } else {
       // 複数マス: マスを並べて、ラベルは真ん中のマスだけに表示
@@ -1449,7 +1594,7 @@ function renderGroupsRow(groups, rtl) {
         const ch = displayChars[j];
         const d = BSE_DOTS[ch] || [];
         const lbl = j === mid ? escHtml(group.label) : '　';
-        html += `<div class="cell">${makeSVG(d, currentMode)}<div class="cell-label">${lbl}</div></div>`;
+        html += `<div class="cell${group.warn?' warn':''}">${makeSVG(d, currentMode)}<div class="cell-label">${lbl}</div></div>`;
       }
       html += `</div>`;
     }
@@ -1462,7 +1607,7 @@ function renderOutput() {
   const rtl = currentMode === 'concave';
   let html = '';
 
-  for (const {bse} of currentBSELines) {
+  for (const {bse, warnings} of currentBSELines) {
     // 完全に空の行（スペースも含めて何もない）のみ空マス1つ表示
     if (bse === '' || bse === undefined) {
       html += `<div class="braille-line">${renderGroupsRow([], false)}</div>`;
@@ -1470,6 +1615,15 @@ function renderOutput() {
     }
 
     const groups = bseToGroups(bse);
+    // 仮名遣いの注意がある語のマスに印を付ける（入力のスペースと点字のマスあけは1対1）
+    if (warnings && warnings.length && document.getElementById('kw-enable').checked) {
+      const idx = new Set(warnings.map(w => w.wordIdx));
+      let wi = 0;
+      for (const g of groups) {
+        if (g.type === 'space') { wi++; continue; }
+        if (idx.has(wi)) g.warn = true;
+      }
+    }
     const rows = wrapGroups(groups);
     html += `<div class="braille-line">`;
     for (const rowGroups of rows) {
@@ -1749,6 +1903,7 @@ function onBSELoad(e) {
     preview.textContent = currentBSELines.map(l => l.bse).join('\n');
 
     renderOutput();
+    renderKanaWarnings();
 
     document.getElementById('dl-area').style.display = '';
   };
