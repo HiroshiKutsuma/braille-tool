@@ -434,7 +434,7 @@ const DAKU_U_MAP = {
 const BSE_DOTS = {
   '!':[2,3,4,6],'"':[5],'#':[3,4,5,6],'$':[1,2,4,6],'%':[1,4,6],
   '&':[1,2,3,4,6],"'":[3],'(':[1,2,3,5,6],')':[2,3,4,5,6],'*':[1,6],
-  '+':[3,4,6],',':[6],'.':[6],'-':[3,6],'/':[3,4],'5':[2,6],
+  '+':[3,4,6],',':[6],'.':[4,6],'-':[3,6],'/':[3,4],'5':[2,6],
   '0':[3,5,6],'1':[2],'2':[2,3],'=':[1,2,3,4,5,6],'3':[2,5],'4':[2,5,6],
   '7':[2,3,5,6],'8':[2,3,6],'9':[3,5],
   ':':[1,5,6],';':[5,6],'<':[1,2,6],']':[1,2,4,5,6],'>':[3,4,5],
@@ -449,7 +449,7 @@ const BSE_DOTS = {
 
 const LABEL = {
   '!':"ほ",'"':"濁",'#':"数",'$':"け",'%':"く",'&':"へ","'":'わ',
-  '(':"み",')':"も",'*':"か",'+':"ゆ",',':"半",'-':"繋1",'.':"半",'/':"や",
+  '(':"み",')':"も",'*':"か",'+':"ゆ",',':"半",'-':"繋1",'.':"拗半",'/':"や",
   '0':"ん",'1':"っ",'=':"め",'3':"ー",'4':"。",'5':"ツ前",'7':"（）",
   '8':"外引",'9':"を",':':"さ",';':"、",'<':"き",']':"せ",'>':"よ",
   '?':"す",'@':"小",'^':"濁小",
@@ -644,7 +644,7 @@ function insertBSE(bseStr) {
   // テキストエリアに表示する記号名
   const symNames = {
     '4':'。', ';':'、', '7':'（）', '#':'《数符》',
-    '"':'《濁》', '.':'《半濁》', '@':'《小字符》', '^':'《濁小》',
+    '"':'《濁》', ',':'《半濁》', '@':'《小字符》', '^':'《濁小》',
     '1':'っ', '3':'ー',
     '8A0':'《外引開》', '80':'《外引閉》',
     '-':'《繋1》', ",'": '《繋2》',
@@ -872,8 +872,8 @@ function kanaToBSE(text, alphaMode) {
     if (ch in HANDAKU) {
       const base = HANDAKU[ch];
       if (combo) { result.push(combo); i+=2; }  // SPECIALを優先（ふぁ等）
-      else if (nxt in SMALL_IDX) { result.push('.','@',getYoon(base,nxt)); i+=2; }
-      else { result.push('.',KANA[base]); i++; }
+      else if (nxt in SMALL_IDX) { result.push('.',getYoon(base,nxt)); i+=2; }  // 拗半濁音符(点4,6)+本体
+      else { result.push(',',KANA[base]); i++; }  // 半濁音符(点6)+本体
       continue;
     }
     if (ch in DAKU) {
@@ -942,7 +942,7 @@ function toggleRuby() {
 const DISP_TO_BSE = {
   '《数符》':'#',
   '《濁》':'"',
-  '《半濁》':'.',
+  '《半濁》':',',
   '《小字符》':'@',
   '《濁小》':'^',
   // 《外字符》《外引開》《外引閉》はkanaToBSEで直接処理
@@ -1408,12 +1408,13 @@ function bseToGroups(bse) {
         const label = HANDAKU_LABEL[base] || base;
         groups.push({ chars: [ch,'@',nxt2], label, type: 'kana' });
         i += 3;
-      } else if (ch === '.' && nxt === '@' && nxt2) {
-        // 半濁音拗音: . @ X → 3マス
-        const base = yoonLabel(nxt2);
-        const label = HANDAKU_LABEL[base] || base;
-        groups.push({ chars: [ch,'@',nxt2], label, type: 'kana' });
-        i += 3;
+      } else if (ch === '.' && nxt && BSE_TO_KANA[nxt]) {
+        // 拗半濁音符(点4,6) + X → ぴゃ・ぴゅ・ぴょ、てゅ(.N)、ふゅ(.+)
+        const SP = { 'N':'てゅ', '+':'ふゅ' };
+        const base = yoonLabel(nxt);
+        const label = SP[nxt] || HANDAKU_LABEL[base] || base;
+        groups.push({ chars: [ch, nxt], label, type: 'kana' });
+        i += 2;
       } else if (nxt && BSE_TO_KANA[nxt]) {
         // 半濁音: . X → 2マス
         const base = BSE_TO_KANA[nxt];
@@ -1833,6 +1834,13 @@ function bseToKana(bseLine) {
       if (ch === ',' && nxt === ',') {
         // 二重大文字符 → 英字モードへ
         inAlpha = true; i += 2; continue;
+      }
+      if (ch === '.' && nxt && nxt in BSE_TO_KANA) {
+        // 拗半濁音符(点4,6) + 本体 → ぴゃ・ぴゅ・ぴょ、てゅ、ふゅ
+        const SP = { 'N':'てゅ', '+':'ふゅ' };
+        const yoon = yoonLabel(nxt);
+        result += SP[nxt] || (HANDAKU_MAP[yoon[0]] ? HANDAKU_MAP[yoon[0]] + yoon.slice(1) : yoon);
+        i += 2; continue;
       }
       if (nxt === '@') {
         // 半濁音+小字符+本体 → 半濁音拗音
