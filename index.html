@@ -214,7 +214,10 @@ textarea:focus { border-color: #999; background: var(--surface); }
   flex-wrap: nowrap;
   margin-bottom: 6px;
 }
-.braille-row.rtl { flex-direction: row-reverse; }
+.braille-row.rtl { flex-direction: row; }
+/* 凹式: 表示欄ごと右→左の向きにして、左にはみ出したマスへもスクロールできるようにする */
+#braille-output.rtl-mode { direction: rtl; }
+#braille-output.rtl-mode .line-ruby { direction: ltr; text-align: right; }
 
 .cell {
   display: flex;
@@ -1590,7 +1593,7 @@ function renderGroupsRow(groups, rtl) {
       // 凹式のときはグループ内も逆順にする
       const displayChars = rtl ? [...group.chars].reverse() : group.chars;
       const mid = Math.floor(n / 2);
-      html += `<div style="display:flex;gap:3px;">`;
+      html += `<div style="display:flex;gap:3px;direction:ltr;">`;
       for (let j = 0; j < n; j++) {
         const ch = displayChars[j];
         const d = BSE_DOTS[ch] || [];
@@ -1637,7 +1640,10 @@ function renderOutput() {
     html += `</div>`;
   }
 
-  document.getElementById('braille-output').innerHTML = html;
+  const outEl = document.getElementById('braille-output');
+  outEl.innerHTML = html;
+  outEl.classList.toggle('rtl-mode', rtl);
+  outEl.scrollLeft = 0;  // 行の書き始め（凹式は右端、凸式は左端）を表示する
 }
 
 
